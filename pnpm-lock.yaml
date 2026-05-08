@@ -169,6 +169,9 @@ importers:
       '@a2a-js/sdk':
         specifier: ^0.3.13
         version: 0.3.13(express@5.2.1)
+      '@agent-relay/domain':
+        specifier: workspace:*
+        version: link:../domain
       '@agentclientprotocol/sdk':
         specifier: ^0.21.0
         version: 0.21.0(zod@4.4.2)

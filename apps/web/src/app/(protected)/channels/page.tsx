@@ -25,6 +25,7 @@ import {
   CHANNEL_OPTIONS,
   ChannelFormMapper,
   EMPTY_FORM,
+  SESSION_ISOLATION_OPTIONS,
   type FormState,
   channelLabel,
   stringifyConfig,
@@ -329,6 +330,31 @@ export default function ChannelsPage() {
                 </SelectContent>
               </Select>
             </FormField>
+            <FormField label="Session Isolation">
+              <Select
+                value={form.sessionIsolationStrategy}
+                onValueChange={(sessionIsolationStrategy) =>
+                  setForm({
+                    ...form,
+                    sessionIsolationStrategy:
+                      parseSessionIsolationStrategy(sessionIsolationStrategy),
+                  })
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {SESSION_ISOLATION_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </FormField>
             <FormField className="sm:col-span-2" label="Channel Config">
               <Textarea
                 className="min-h-44 font-mono text-xs"
@@ -442,6 +468,10 @@ function ChannelCard({
           <Info label="Agent" value={agentLabel} />
           <Info label="Ownership" value={statusView.ownership} />
           <Info label="Config" value={summarizeConfig(binding.channelConfig)} />
+          <Info
+            label="Session"
+            value={sessionIsolationLabel(binding.sessionIsolationStrategy)}
+          />
           <Info label="Lease" value={displayStatus.leaseHeld ? "held" : "none"} />
         </div>
 
@@ -476,6 +506,19 @@ function ChannelCard({
       </CardContent>
     </Card>
   );
+}
+
+function sessionIsolationLabel(value: string): string {
+  return (
+    SESSION_ISOLATION_OPTIONS.find((option) => option.value === value)?.label ??
+    "SessionKey"
+  );
+}
+
+function parseSessionIsolationStrategy(
+  value: string,
+): FormState["sessionIsolationStrategy"] {
+  return value === "request" || value === "accountId" ? value : "sessionKey";
 }
 
 function Info({ label, value }: { label: string; value: string }) {

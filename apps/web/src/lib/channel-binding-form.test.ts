@@ -44,6 +44,7 @@ describe("channel binding form metadata", () => {
       channelType: "wechat",
       accountId: " ",
       agentId: "agent-1",
+      sessionIsolationStrategy: "sessionKey",
       enabled: true,
       channelConfigJson: "{}",
     });

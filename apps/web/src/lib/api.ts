@@ -19,6 +19,7 @@ export interface ChannelBinding {
   accountId: string;
   channelConfig: Record<string, unknown>;
   agentId: string;
+  sessionIsolationStrategy: SessionIsolationStrategy;
   enabled: boolean;
   createdAt: string;
 }
@@ -36,7 +37,11 @@ export type AgentProtocol = "a2a" | "acp";
 
 export interface A2AAgentConfig {
   url: string;
+  contextIdStrategy?: A2AContextIdStrategy;
 }
+
+export type A2AContextIdStrategy = "client-provided" | "server-assigned";
+export type SessionIsolationStrategy = "request" | "sessionKey" | "accountId";
 
 export interface ACPStdioAgentConfig {
   transport: "stdio";

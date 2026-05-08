@@ -23,6 +23,7 @@ import {
   CHANNEL_CONFIG_TEMPLATES,
   CHANNEL_OPTIONS,
   ChannelFormMapper,
+  SESSION_ISOLATION_OPTIONS,
   type FormState,
   channelCreateHref,
   channelGuide,
@@ -89,7 +90,10 @@ export function NewChannelBindingPage({
     () => CHANNEL_OPTIONS.find((channel) => channel.value === form.channelType),
     [form.channelType],
   );
-  const guide = useMemo(() => channelGuide(form.channelType), [form.channelType]);
+  const guide = useMemo(
+    () => channelGuide(form.channelType),
+    [form.channelType],
+  );
   const qrPolling =
     supportsQrLogin(form.channelType) &&
     Boolean(qrState.sessionKey) &&
@@ -153,7 +157,10 @@ export function NewChannelBindingPage({
         force: true,
       });
       if (result.accountId) {
-        setForm((current) => ({ ...current, accountId: result.accountId ?? "" }));
+        setForm((current) => ({
+          ...current,
+          accountId: result.accountId ?? "",
+        }));
       }
       setQrState({
         imageUrl: result.qrDataUrl,
@@ -246,7 +253,12 @@ export function NewChannelBindingPage({
         window.clearTimeout(timer);
       }
     };
-  }, [checkQr, form.channelType, qrState.connectedAccountId, qrState.sessionKey]);
+  }, [
+    checkQr,
+    form.channelType,
+    qrState.connectedAccountId,
+    qrState.sessionKey,
+  ]);
 
   async function handleSave() {
     setSaving(true);
@@ -324,7 +336,9 @@ export function NewChannelBindingPage({
           <CardHeader className="border-b border-border">
             <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
               <div>
-                <CardTitle>{selectedChannel?.label ?? form.channelType}</CardTitle>
+                <CardTitle>
+                  {selectedChannel?.label ?? form.channelType}
+                </CardTitle>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {supportsQrLogin(form.channelType)
                     ? "QR login can populate the channel settings before saving."
@@ -332,7 +346,9 @@ export function NewChannelBindingPage({
                 </p>
               </div>
               {supportsQrLogin(form.channelType) && (
-                <Badge variant={qrState.connectedAccountId ? "success" : "outline"}>
+                <Badge
+                  variant={qrState.connectedAccountId ? "success" : "outline"}
+                >
                   {qrState.connectedAccountId ? "connected" : "QR login"}
                 </Badge>
               )}
@@ -362,6 +378,17 @@ export function NewChannelBindingPage({
                   value={form.name}
                 />
               </FormField>
+              <FormField label="Enabled">
+                <div className="flex h-8 items-center">
+                  <Checkbox
+                    className="w-fit"
+                    checked={form.enabled}
+                    onCheckedChange={(checked) =>
+                      setForm({ ...form, enabled: checked === true })
+                    }
+                  />
+                </div>
+              </FormField>
               <FormField label="Agent">
                 <Select
                   disabled={loading}
@@ -382,15 +409,32 @@ export function NewChannelBindingPage({
                   </SelectContent>
                 </Select>
               </FormField>
-              <ShadcnField orientation="horizontal">
-                <Checkbox
-                  checked={form.enabled}
-                  onCheckedChange={(checked) =>
-                    setForm({ ...form, enabled: checked === true })
+              <FormField label="Session Isolation">
+                <Select
+                  onValueChange={(sessionIsolationStrategy) =>
+                    setForm({
+                      ...form,
+                      sessionIsolationStrategy: parseSessionIsolationStrategy(
+                        sessionIsolationStrategy,
+                      ),
+                    })
                   }
-                />
-                <FieldLabel>Enabled</FieldLabel>
-              </ShadcnField>
+                  value={form.sessionIsolationStrategy}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {SESSION_ISOLATION_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </FormField>
             </FieldGroup>
 
             <ChannelConfigFields
@@ -414,6 +458,12 @@ export function NewChannelBindingPage({
       </div>
     </div>
   );
+}
+
+function parseSessionIsolationStrategy(
+  value: string,
+): FormState["sessionIsolationStrategy"] {
+  return value === "request" || value === "accountId" ? value : "sessionKey";
 }
 
 function QrLoginPanel({
@@ -458,7 +508,8 @@ function QrLoginPanel({
           <p className="mt-2 break-words text-sm text-muted-foreground">
             {polling
               ? "Waiting for scan confirmation..."
-              : (state.message ?? "Generate a QR code from the channel gateway.")}
+              : (state.message ??
+                "Generate a QR code from the channel gateway.")}
           </p>
           {state.connectedAccountId && (
             <p className="mt-2 break-all text-xs text-muted-foreground">
@@ -489,7 +540,11 @@ function QrLoginPanel({
   );
 }
 
-function ChannelGuidePanel({ guide }: { guide: ReturnType<typeof channelGuide> }) {
+function ChannelGuidePanel({
+  guide,
+}: {
+  guide: ReturnType<typeof channelGuide>;
+}) {
   return (
     <div className="rounded-md border border-border bg-background p-4">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
@@ -534,7 +589,7 @@ function ChannelConfigFields({
       {fields.map((field) => (
         <FormField key={field.key} label={field.label}>
           {field.type === "boolean" ? (
-            <div className="flex h-10 items-center gap-2">
+            <div className="flex h-8 items-center gap-2">
               <Checkbox
                 checked={config[field.key] === true}
                 onCheckedChange={(checked) =>
@@ -563,13 +618,13 @@ function ChannelConfigFields({
           ) : (
             <Input
               onChange={(event) => onChange(field.key, event.target.value)}
-              type={field.secret || field.type === "secret" ? "password" : "text"}
+              type={
+                field.secret || field.type === "secret" ? "password" : "text"
+              }
               value={fieldValue(config[field.key])}
             />
           )}
-          {field.help && (
-            <FieldDescription>{field.help}</FieldDescription>
-          )}
+          {field.help && <FieldDescription>{field.help}</FieldDescription>}
         </FormField>
       ))}
     </div>
@@ -631,6 +686,7 @@ function createFormState(channelType: string, agentId = ""): FormState {
     channelType: normalizedChannelType,
     accountId: "",
     agentId,
+    sessionIsolationStrategy: "sessionKey",
     enabled: true,
     channelConfigJson: stringifyConfig(
       CHANNEL_CONFIG_TEMPLATES[normalizedChannelType] ?? {},

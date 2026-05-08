@@ -15,6 +15,7 @@ import {
   AgentConfigRepository,
   ChannelBindingRepository,
   ChannelMessageRepository,
+  SessionMappingRepository,
 } from "@agent-relay/domain";
 import { AgentService } from "../application/agent-service.js";
 import { AccountIdGenerator } from "../application/account-id-generator.js";
@@ -46,6 +47,7 @@ import { AccountStateRepository } from "../infra/account-repo.js";
 import { AccountCredentialsStateRepository } from "../infra/account-credentials-repo.js";
 import { ChannelBindingStateRepository } from "../infra/channel-binding-repo.js";
 import { ChannelMessageStateRepository } from "../infra/channel-message-repo.js";
+import { SessionMappingStateRepository } from "../infra/session-mapping-repo.js";
 import { BunQueueScheduledJobService } from "../infra/bunqueue-scheduled-job-service.js";
 import {
   createGatewayLogger,
@@ -143,6 +145,7 @@ function bindInfrastructure(
   container.bind(AgentConfigStateRepository).toSelf().inSingletonScope();
   container.bind(ChannelBindingStateRepository).toSelf().inSingletonScope();
   container.bind(ChannelMessageStateRepository).toSelf().inSingletonScope();
+  container.bind(SessionMappingStateRepository).toSelf().inSingletonScope();
   container.bind(BunQueueScheduledJobService).toSelf().inSingletonScope();
   container.bind(RuntimeNodeStateRepository).toSelf().inSingletonScope();
 
@@ -166,6 +169,9 @@ function bindApplication(container: Container): void {
   container
     .bind(ChannelMessageRepository)
     .toService(ChannelMessageStateRepository);
+  container
+    .bind(SessionMappingRepository)
+    .toService(SessionMappingStateRepository);
   container
     .bind<ScheduledJobServicePort>(ScheduledJobService)
     .toService(BunQueueScheduledJobService);

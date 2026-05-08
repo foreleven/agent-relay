@@ -7,13 +7,15 @@ import { mkdir } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { Readable, Writable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
-import type {
-  ACPStdioAgentConfig,
-  AgentFile,
-  AgentRequest,
-  AgentResponse,
-  AgentTransport,
-  AgentTransportContext,
+import {
+  type ACPStdioAgentConfig,
+  type AgentFile,
+  type AgentResponse,
+  type AgentTransport,
+  type AgentTransportContext,
+  type AgentRequest,
+  AgentRequestSession,
+  type AgentCallContext,
 } from "./transport.js";
 
 interface CommandSpec {
@@ -35,8 +37,11 @@ export class ACPStdioTransport implements AgentTransport {
     this.processPool = new ACPStdioAgentProcessPool(config, context);
   }
 
-  send(request: AgentRequest): Promise<AgentResponse> {
-    return this.processPool.send(request);
+  send(
+    request: AgentRequest,
+    ctx: AgentCallContext = {},
+  ): Promise<AgentResponse> {
+    return this.processPool.send(request, ctx);
   }
 
   start(): Promise<void> {
@@ -48,8 +53,15 @@ export class ACPStdioTransport implements AgentTransport {
   }
 }
 
+/**
+ * Owns ACP worker processes for one transport config.
+ *
+ * ACP sessions are created below the worker layer. The pool only decides which
+ * long-lived process should receive a request, so account/workspace isolation
+ * stays separate from protocol-level session id reuse.
+ */
 class ACPStdioAgentProcessPool {
-  private readonly workers = new Map<string, ACPStdioAccountWorker>();
+  private readonly workers = new Map<string, ACPStdioAgentProcess>();
   private stopping = false;
 
   constructor(
@@ -57,7 +69,10 @@ class ACPStdioAgentProcessPool {
     private readonly context?: AgentTransportContext,
   ) {}
 
-  async send(request: AgentRequest): Promise<AgentResponse> {
+  async send(
+    request: AgentRequest,
+    ctx: AgentCallContext = {},
+  ): Promise<AgentResponse> {
     if (this.stopping) {
       return { text: "(agent unavailable: ACP stdio transport is stopping)" };
     }
@@ -66,7 +81,7 @@ class ACPStdioAgentProcessPool {
     const worker = this.getOrCreateWorker(workerKey, request);
 
     try {
-      return await worker.send(request);
+      return await worker.send(request, ctx);
     } catch (error) {
       if (this.workers.get(workerKey) === worker) {
         this.workers.delete(workerKey);
@@ -91,15 +106,14 @@ class ACPStdioAgentProcessPool {
   private getOrCreateWorker(
     workerKey: string,
     request: AgentRequest,
-  ): ACPStdioAccountWorker {
+  ): ACPStdioAgentProcess {
     let worker = this.workers.get(workerKey);
     if (!worker) {
-      worker = new ACPStdioAccountWorker(
-        request.accountId,
+      worker = new ACPStdioAgentProcess(
         parseCommandSpec(
           this.config,
           request.accountId,
-          request.sessionKey,
+          request.sessionKey.toString(),
           this.context,
         ),
       );
@@ -110,33 +124,27 @@ class ACPStdioAgentProcessPool {
   }
 }
 
-class ACPStdioAccountWorker {
-  private readonly process: ACPStdioAgentProcess;
-
-  constructor(
-    readonly accountId: string,
-    command: CommandSpec,
-  ) {
-    this.process = new ACPStdioAgentProcess(command);
-  }
-
-  send(request: AgentRequest): Promise<AgentResponse> {
-    return this.process.send(request);
-  }
-
-  stop(): Promise<void> {
-    return this.process.stop();
-  }
-}
-
+/**
+ * Wraps one ACP stdio process and maps gateway session keys to ACP session ids.
+ *
+ * Session behavior follows the ACP session setup contract:
+ * - Each request gets a fresh `session/new` session unless the caller provides
+ *   a protocol session id through the call context.
+ * - A provided ACP session id is loaded only when the agent advertises the
+ *   top-level `loadSession` capability and accepts `session/load`.
+ *
+ * This class intentionally does not know where mappings are stored. It accepts
+ * a previous ACP session id through context and returns a reusable ACP session
+ * id in the response only when later `session/load` is supported.
+ */
 class ACPStdioAgentProcess {
   private child: ChildProcessWithoutNullStreams | null = null;
   private connection: acp.ClientSideConnection | null = null;
   private initializePromise: Promise<void> | null = null;
-  private readonly sessions = new Map<string, string>();
   private readonly activeTextBuffers = new Map<string, string[]>();
   private readonly activeFileBuffers = new Map<string, AgentFile[]>();
   private readonly client: ACPStdioClientCallbacks;
+  private agentCapabilities?: acp.AgentCapabilities;
   private turnQueue = Promise.resolve();
   private stopping = false;
 
@@ -152,8 +160,8 @@ class ACPStdioAgentProcess {
     return this.initialize();
   }
 
-  send(request: AgentRequest): Promise<AgentResponse> {
-    const turn = this.turnQueue.then(() => this.sendSerialized(request));
+  send(request: AgentRequest, ctx: AgentCallContext): Promise<AgentResponse> {
+    const turn = this.turnQueue.then(() => this.sendSerialized(request, ctx));
     this.turnQueue = turn.then(
       () => undefined,
       () => undefined,
@@ -167,7 +175,7 @@ class ACPStdioAgentProcess {
     this.child = null;
     this.connection = null;
     this.initializePromise = null;
-    this.sessions.clear();
+    this.agentCapabilities = undefined;
     this.activeTextBuffers.clear();
     this.activeFileBuffers.clear();
 
@@ -186,11 +194,13 @@ class ACPStdioAgentProcess {
     });
   }
 
-  private async sendSerialized(request: AgentRequest): Promise<AgentResponse> {
+  private async sendSerialized(
+    request: AgentRequest,
+    ctx: AgentCallContext,
+  ): Promise<AgentResponse> {
     await this.initialize();
     const connection = this.requireConnection();
-    // Each account has its own process so no accountId prefix is needed here.
-    const sessionId = await this.getOrCreateSession(request.sessionKey);
+    const sessionId = await this.getOrCreateSession(ctx);
     const collectedText: string[] = [];
     const collectedFiles: AgentFile[] = [];
     this.activeTextBuffers.set(sessionId, collectedText);
@@ -211,6 +221,9 @@ class ACPStdioAgentProcess {
       const text = collectedText.join("").trim();
       return {
         text: text || "(no response from agent)",
+        ...(this.canReturnProtocolSessionId()
+          ? { protocolSessionId: sessionId }
+          : {}),
         ...(collectedFiles.length ? { files: collectedFiles } : {}),
       };
     } finally {
@@ -232,7 +245,7 @@ class ACPStdioAgentProcess {
       }
       this.startChild();
       const connection = this.requireConnection();
-      await withTimeout(
+      const response = await withTimeout(
         connection.initialize({
           protocolVersion: acp.PROTOCOL_VERSION,
           clientCapabilities: {
@@ -247,15 +260,22 @@ class ACPStdioAgentProcess {
         this.command.timeoutMs,
         'ACP request "initialize"',
       );
+      this.agentCapabilities = response.agentCapabilities;
+      console.log(
+        "[acp stdio] agent initialized with capabilities:",
+        JSON.stringify(this.agentCapabilities),
+      );
     })();
 
     return this.initializePromise;
   }
 
-  private async getOrCreateSession(sessionKey: string): Promise<string> {
-    const existing = this.sessions.get(sessionKey);
-    if (existing) return existing;
+  private async getOrCreateSession(ctx: AgentCallContext): Promise<string> {
+    const loaded = await this.loadProtocolSession(ctx.protocolSessionId);
+    if (loaded) return loaded;
 
+    // No reusable ACP session exists for this gateway session key. Create a new
+    // protocol session and return it only when the agent can load it later.
     const response = await withTimeout(
       this.requireConnection().newSession({
         cwd: this.command.cwd,
@@ -265,8 +285,42 @@ class ACPStdioAgentProcess {
       'ACP request "session/new"',
     );
 
-    this.sessions.set(sessionKey, response.sessionId);
     return response.sessionId;
+  }
+
+  private async loadProtocolSession(
+    sessionId: string | undefined,
+  ): Promise<string | null> {
+    if (!this.canLoadSessions() || !sessionId) {
+      return null;
+    }
+
+    try {
+      await withTimeout(
+        this.requireConnection().loadSession({
+          sessionId: sessionId,
+          cwd: this.command.cwd,
+          mcpServers: [],
+        }),
+        this.command.timeoutMs,
+        'ACP request "session/load"',
+      );
+      return sessionId;
+    } catch (error) {
+      console.error(
+        "[acp stdio] failed to load mapped session:",
+        String(error),
+      );
+      return null;
+    }
+  }
+
+  private canReturnProtocolSessionId(): boolean {
+    return this.canLoadSessions();
+  }
+
+  private canLoadSessions(): boolean {
+    return Boolean(this.agentCapabilities?.loadSession);
   }
 
   private startChild(): void {
@@ -318,7 +372,7 @@ class ACPStdioAgentProcess {
     this.child = null;
     this.connection = null;
     this.initializePromise = null;
-    this.sessions.clear();
+    this.agentCapabilities = undefined;
     this.activeTextBuffers.clear();
     this.activeFileBuffers.clear();
   }
@@ -508,9 +562,10 @@ function buildWorkerKey(
   request: AgentRequest,
 ): string {
   const sessionScoped = commandTemplatesUseSessionKey(config);
-  return [request.accountId, sessionScoped ? request.sessionKey : ""].join(
-    "\0",
-  );
+  return [
+    request.accountId,
+    sessionScoped ? request.sessionKey.toString() : "",
+  ].join("\0");
 }
 
 function commandTemplatesUseSessionKey(config: ACPStdioAgentConfig): boolean {

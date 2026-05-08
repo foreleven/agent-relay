@@ -12,6 +12,8 @@
 
 import type { ChannelBindingEvent } from "../events.js";
 
+export type SessionIsolationStrategy = "request" | "sessionKey" | "accountId";
+
 export interface ChannelBindingSnapshot {
   readonly id: string;
   readonly name: string;
@@ -19,6 +21,7 @@ export interface ChannelBindingSnapshot {
   readonly accountId: string;
   readonly channelConfig: Record<string, unknown>;
   readonly agentId: string;
+  readonly sessionIsolationStrategy?: SessionIsolationStrategy;
   readonly enabled: boolean;
   readonly createdAt: string;
 }
@@ -31,6 +34,7 @@ export class ChannelBindingAggregate {
   accountId!: string;
   channelConfig!: Record<string, unknown>;
   agentId!: string;
+  sessionIsolationStrategy!: SessionIsolationStrategy;
   enabled!: boolean;
   createdAt!: string;
 
@@ -60,6 +64,7 @@ export class ChannelBindingAggregate {
       accountId: this.accountId,
       channelConfig: this.channelConfig,
       agentId: this.agentId,
+      sessionIsolationStrategy: this.sessionIsolationStrategy,
       enabled: this.enabled,
       createdAt: this.createdAt,
     };
@@ -76,6 +81,7 @@ export class ChannelBindingAggregate {
     accountId: string;
     channelConfig: Record<string, unknown>;
     agentId: string;
+    sessionIsolationStrategy?: SessionIsolationStrategy;
     enabled: boolean;
   }): ChannelBindingAggregate {
     const agg = new ChannelBindingAggregate();
@@ -87,6 +93,8 @@ export class ChannelBindingAggregate {
       accountId: data.accountId,
       channelConfig: data.channelConfig,
       agentId: data.agentId,
+      sessionIsolationStrategy:
+        data.sessionIsolationStrategy ?? "sessionKey",
       enabled: data.enabled,
       occurredAt: new Date().toISOString(),
     });
@@ -150,6 +158,8 @@ export class ChannelBindingAggregate {
     agg.accountId = snapshot.accountId;
     agg.channelConfig = snapshot.channelConfig;
     agg.agentId = snapshot.agentId;
+    agg.sessionIsolationStrategy =
+      snapshot.sessionIsolationStrategy ?? "sessionKey";
     agg.enabled = snapshot.enabled;
     agg.createdAt = snapshot.createdAt;
     return agg;
@@ -174,6 +184,8 @@ export class ChannelBindingAggregate {
         this.accountId = event.accountId;
         this.channelConfig = event.channelConfig;
         this.agentId = event.agentId;
+        this.sessionIsolationStrategy =
+          event.sessionIsolationStrategy ?? "sessionKey";
         this.enabled = event.enabled;
         this.createdAt = event.occurredAt;
         break;
@@ -185,6 +197,8 @@ export class ChannelBindingAggregate {
         if (c.accountId !== undefined) this.accountId = c.accountId;
         if (c.channelConfig !== undefined) this.channelConfig = c.channelConfig;
         if (c.agentId !== undefined) this.agentId = c.agentId;
+        if (c.sessionIsolationStrategy !== undefined)
+          this.sessionIsolationStrategy = c.sessionIsolationStrategy;
         if (c.enabled !== undefined) this.enabled = c.enabled;
         break;
       }

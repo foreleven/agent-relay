@@ -58,6 +58,22 @@ describe("SessionKey", () => {
     assert.match(sessionKey.toMd5(), /^[a-f0-9]{32}$/);
   });
 
+  test("derives downstream session ids by isolation strategy", () => {
+    const sessionKey = SessionKey.fromString("channel-session");
+
+    assert.equal(sessionKey.toSessionId({ type: "sessionKey" }), sessionKey.toMd5());
+    assert.equal(
+      sessionKey.toSessionId({
+        type: "accountId",
+        bindingId: "binding-1",
+        accountId: "default",
+      }),
+      SessionKey.fromString("binding:binding-1:account:default").toMd5(),
+    );
+
+    assert.equal(sessionKey.toSessionId({ type: "request" }), undefined);
+  });
+
   test("rejects empty session keys and empty build parts", () => {
     assert.throws(() => SessionKey.parse("   "), /sessionKey/);
     assert.throws(

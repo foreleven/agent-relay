@@ -102,6 +102,37 @@ export function AgentConfigFields({
         )}
       </div>
 
+      {form.protocol === "a2a" && (
+        <FormField label="Context ID Strategy">
+          <Select
+            onValueChange={(value) =>
+              onChange({
+                ...form,
+                contextIdStrategy:
+                  value === "server-assigned"
+                    ? "server-assigned"
+                    : "client-provided",
+              })
+            }
+            value={form.contextIdStrategy}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="client-provided">Client provided</SelectItem>
+                <SelectItem value="server-assigned">Server assigned</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <FieldDescription>
+            Server assigned stores the contextId returned by A2A tasks before
+            reusing it.
+          </FieldDescription>
+        </FormField>
+      )}
+
       {form.protocol === "acp" && (
         <div className="grid gap-4 sm:grid-cols-2">
           <FormField

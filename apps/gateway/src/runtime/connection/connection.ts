@@ -3,7 +3,7 @@ import type {
   AgentFile,
   AgentResponseStreamEvent,
 } from "@agent-relay/agent-transport";
-import type { ChannelBindingSnapshot, SessionKey } from "@agent-relay/domain";
+import type { ChannelBindingSnapshot } from "@agent-relay/domain";
 import { OpenClawPluginHost } from "@agent-relay/openclaw-compat";
 import type { ChannelBindingStatusUpdate } from "@agent-relay/openclaw-compat";
 
@@ -27,7 +27,14 @@ export interface ConnectionOptions {
   logger?: GatewayLogger;
 }
 
-/** Live plugin and agent connection for one owned channel binding. */
+/**
+ * Live plugin and agent connection for one owned channel binding.
+ *
+ * Session mapping policy lives in AgentClientFactory's transport wrapper. This
+ * connection passes the owned binding and raw channel session key with each
+ * request so that downstream session derivation and persistence decisions stay
+ * in one place.
+ */
 export class Connection {
   readonly abortController = new AbortController();
   hasReportedConnected = false;
@@ -147,7 +154,6 @@ export class Connection {
     event: GatewayMessageInboundEvent,
   ): Promise<{ text: string; files?: AgentFile[] } | null> {
     const { accountId, channelType, sessionKey, userMessage, files } = event;
-    const downstreamSessionKey = this.toDownstreamSessionKey(sessionKey);
 
     if (!userMessage.trim() && !files?.length) {
       return null;
@@ -157,8 +163,9 @@ export class Connection {
     try {
       result = await this.options.agentClient.send({
         message: userMessage,
-        sessionKey: downstreamSessionKey,
+        sessionKey,
         accountId,
+        binding: this.binding,
         ...(files?.length ? { files } : {}),
       });
     } catch (error) {
@@ -190,15 +197,15 @@ export class Connection {
     event: GatewayMessageInboundEvent,
   ): AsyncIterable<AgentResponseStreamEvent> {
     const { accountId, channelType, sessionKey, userMessage, files } = event;
-    const downstreamSessionKey = this.toDownstreamSessionKey(sessionKey);
     let sawFinal = false;
     let lastText = "";
 
     try {
       for await (const chunk of this.options.agentClient.stream({
         message: userMessage,
-        sessionKey: downstreamSessionKey,
+        sessionKey,
         accountId,
+        binding: this.binding,
         ...(files?.length ? { files } : {}),
       })) {
         if (chunk.text) {
@@ -255,10 +262,6 @@ export class Connection {
         metadata: { kind: "final", error: true },
       });
     }
-  }
-
-  private toDownstreamSessionKey(sessionKey: SessionKey): string {
-    return sessionKey.toMd5();
   }
 
   private maybeReportConnected(status: ChannelBindingStatusUpdate): void {

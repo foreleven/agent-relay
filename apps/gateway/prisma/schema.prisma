@@ -46,6 +46,7 @@ model ChannelBinding {
   accountId     String   @map("account_id")
   channelConfig String   @default("{}") @map("channel_config")
   agentId       String   @map("agent_id")
+  sessionIsolationStrategy String   @default("sessionKey") @map("session_isolation_strategy")
   enabledKey    String?  @unique @map("enabled_key")
   enabled       Boolean  @default(true)
   createdAt     DateTime @default(now()) @map("created_at")
@@ -68,9 +69,26 @@ model Agent {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  bindings    ChannelBinding[]
+  bindings        ChannelBinding[]
+  sessionMappings SessionMapping[]
 
   @@map("agents")
+}
+
+model SessionMapping {
+  id                String   @id @default(uuid())
+  agentId           String   @map("agent_id")
+  protocol          String
+  sessionKey        String   @map("session_key")
+  protocolSessionId String   @map("protocol_session_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([agentId, protocol, sessionKey])
+  @@index([protocol, protocolSessionId])
+  @@map("session_mappings")
 }
 
 model RuntimeNode {

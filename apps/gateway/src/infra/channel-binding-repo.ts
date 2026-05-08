@@ -1,5 +1,11 @@
-import type { ChannelBindingRepository, ChannelBindingSnapshot } from "@agent-relay/domain";
-import { ChannelBindingAggregate } from "@agent-relay/domain";
+import type {
+  ChannelBindingRepository,
+  ChannelBindingSnapshot,
+} from "@agent-relay/domain";
+import {
+  ChannelBindingAggregate,
+  type SessionIsolationStrategy,
+} from "@agent-relay/domain";
 import { injectable } from "inversify";
 
 import { prisma } from "../store/prisma.js";
@@ -22,6 +28,7 @@ function mapPrismaRowToSnapshot(row: {
   accountId: string;
   channelConfig: string;
   agentId: string;
+  sessionIsolationStrategy?: string;
   enabled: boolean;
   createdAt: Date;
 }): ChannelBindingSnapshot {
@@ -32,6 +39,9 @@ function mapPrismaRowToSnapshot(row: {
     accountId: row.accountId,
     channelConfig: JSON.parse(row.channelConfig) as Record<string, unknown>,
     agentId: row.agentId,
+    sessionIsolationStrategy: parseSessionIsolationStrategy(
+      row.sessionIsolationStrategy,
+    ),
     enabled: row.enabled,
     createdAt: row.createdAt.toISOString(),
   };
@@ -106,6 +116,8 @@ export class ChannelBindingStateRepository implements ChannelBindingRepository {
             accountId: snapshot.accountId,
             channelConfig: JSON.stringify(snapshot.channelConfig),
             agentId: snapshot.agentId,
+            sessionIsolationStrategy:
+              snapshot.sessionIsolationStrategy ?? "sessionKey",
             enabledKey: buildEnabledKey(snapshot),
             enabled: snapshot.enabled,
             createdAt: new Date(snapshot.createdAt),
@@ -116,6 +128,8 @@ export class ChannelBindingStateRepository implements ChannelBindingRepository {
             accountId: snapshot.accountId,
             channelConfig: JSON.stringify(snapshot.channelConfig),
             agentId: snapshot.agentId,
+            sessionIsolationStrategy:
+              snapshot.sessionIsolationStrategy ?? "sessionKey",
             enabledKey: buildEnabledKey(snapshot),
             enabled: snapshot.enabled,
           },
@@ -126,4 +140,10 @@ export class ChannelBindingStateRepository implements ChannelBindingRepository {
 
     aggregate.clearPendingEvents();
   }
+}
+
+function parseSessionIsolationStrategy(
+  value: string | undefined,
+): SessionIsolationStrategy {
+  return value === "request" || value === "accountId" ? value : "sessionKey";
 }

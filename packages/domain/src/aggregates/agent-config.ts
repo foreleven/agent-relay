@@ -15,7 +15,10 @@ export type AgentProtocol = "a2a" | "acp";
 
 export interface A2AAgentConfig {
   readonly url: string;
+  readonly contextIdStrategy?: A2AContextIdStrategy;
 }
+
+export type A2AContextIdStrategy = "client-provided" | "server-assigned";
 
 export interface ACPStdioAgentConfig {
   readonly transport: "stdio";

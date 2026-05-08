@@ -1,4 +1,26 @@
-import type { ChannelBinding } from "@/lib/api";
+import type { ChannelBinding, SessionIsolationStrategy } from "@/lib/api";
+
+export const SESSION_ISOLATION_OPTIONS: Array<{
+  value: SessionIsolationStrategy;
+  label: string;
+  summary: string;
+}> = [
+  {
+    value: "sessionKey",
+    label: "SessionKey",
+    summary: "Reuse protocol sessions per channel session.",
+  },
+  {
+    value: "accountId",
+    label: "Account ID",
+    summary: "Reuse one protocol session for the bound account.",
+  },
+  {
+    value: "request",
+    label: "Request",
+    summary: "Start an isolated protocol session for every request.",
+  },
+];
 
 export const CHANNEL_OPTIONS = [
   { value: "feishu", label: "Feishu / Lark", supportsQr: true },
@@ -304,6 +326,7 @@ export interface FormState {
   channelType: string;
   accountId: string;
   agentId: string;
+  sessionIsolationStrategy: SessionIsolationStrategy;
   enabled: boolean;
   channelConfigJson: string;
 }
@@ -313,6 +336,7 @@ export const EMPTY_FORM: FormState = {
   channelType: "feishu",
   accountId: "default",
   agentId: "",
+  sessionIsolationStrategy: "sessionKey",
   enabled: true,
   channelConfigJson: stringifyConfig(CHANNEL_CONFIG_TEMPLATES["feishu"]),
 };
@@ -330,6 +354,7 @@ export class ChannelFormMapper {
       channelType: form.channelType,
       ...(accountId ? { accountId } : {}),
       agentId: form.agentId,
+      sessionIsolationStrategy: form.sessionIsolationStrategy,
       enabled: form.enabled,
       channelConfig: this.parseConfig(form.channelConfigJson),
     };
@@ -341,6 +366,8 @@ export class ChannelFormMapper {
       channelType: binding.channelType,
       accountId: binding.accountId,
       agentId: binding.agentId,
+      sessionIsolationStrategy:
+        binding.sessionIsolationStrategy ?? "sessionKey",
       enabled: binding.enabled,
       channelConfigJson: stringifyConfig(binding.channelConfig),
     };

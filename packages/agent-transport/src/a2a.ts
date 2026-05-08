@@ -8,15 +8,18 @@
 import crypto from "node:crypto";
 import { ClientFactory } from "@a2a-js/sdk/client";
 import type { MessageSendParams, Part } from "@a2a-js/sdk";
-import type {
-  A2AAgentConfig,
-  AgentFile,
-  AgentProtocolConfig,
-  AgentRequest,
-  AgentResponse,
-  AgentResponseStreamEvent,
-  AgentTransport,
-  AgentTransportFactory,
+import {
+  type A2AAgentConfig,
+  type AgentFile,
+  type AgentProtocolConfig,
+  type AgentResponse,
+  type AgentResponseStreamEvent,
+  type AgentTransport,
+  type AgentTransportContext,
+  type AgentTransportFactory,
+  type AgentRequest,
+  AgentRequestSession,
+  type AgentCallContext,
 } from "./transport.js";
 
 /** Extract the first text reply from an A2A result envelope. */
@@ -139,6 +142,21 @@ function extractFilesFromParts(parts: unknown[]): AgentFile[] {
   return files;
 }
 
+function extractContextId(result: unknown): string | undefined {
+  if (!result || typeof result !== "object") return undefined;
+  const rec = result as Record<string, unknown>;
+  if ("jsonrpc" in rec && "result" in rec) {
+    return extractContextId(rec["result"]);
+  }
+  if (typeof rec["contextId"] === "string" && rec["contextId"].trim()) {
+    return rec["contextId"];
+  }
+  if (rec["kind"] === "artifact-update") {
+    return extractContextId(rec["task"]);
+  }
+  return undefined;
+}
+
 /** Build A2A FilePart objects from AgentFile attachments. */
 function buildFileParts(files: AgentFile[]): Array<Part> {
   const parts: Array<Part> = [];
@@ -170,12 +188,15 @@ function buildFileParts(files: AgentFile[]): Array<Part> {
 export class A2ATransport implements AgentTransportFactory {
   readonly protocol = "a2a";
 
-  create(config: AgentProtocolConfig): AgentTransport {
+  create(
+    config: AgentProtocolConfig,
+    context?: AgentTransportContext,
+  ): AgentTransport {
     if (!isA2AAgentConfig(config)) {
       throw new Error("A2A transport requires config.url");
     }
 
-    return new A2AAgentTransport(config);
+    return new A2AAgentTransport(config, context);
   }
 }
 
@@ -195,9 +216,15 @@ class A2AAgentTransport implements AgentTransport {
     Awaited<ReturnType<ClientFactory["createFromUrl"]>>
   >();
 
-  constructor(private readonly config: A2AAgentConfig) {}
+  constructor(
+    private readonly config: A2AAgentConfig,
+    _context?: AgentTransportContext,
+  ) {}
 
-  async send(request: AgentRequest): Promise<AgentResponse> {
+  async send(
+    request: AgentRequest,
+    ctx: AgentCallContext = {},
+  ): Promise<AgentResponse> {
     const timeoutMs = 30_000;
     const abortController = new AbortController();
     let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
@@ -219,13 +246,16 @@ class A2AAgentTransport implements AgentTransport {
         client = await this.factory.createFromUrl(agentUrl);
         this.clientCache.set(agentUrl, client);
       }
-      const result = await client.sendMessage(this.buildPayload(request), {
+      const payload = await this.buildPayload(request, ctx);
+      const result = await client.sendMessage(payload, {
         signal: abortController.signal,
       });
       const text = extractText(result);
       const files = extractFiles(result);
+      const protocolSessionId = this.extractServerContextId(result);
       return {
         text: text || "(no response from agent)",
+        ...(protocolSessionId ? { protocolSessionId } : {}),
         ...(files.length ? { files } : {}),
       };
     })();
@@ -241,6 +271,7 @@ class A2AAgentTransport implements AgentTransport {
 
   async *stream(
     request: AgentRequest,
+    ctx: AgentCallContext = {},
   ): AsyncIterable<AgentResponseStreamEvent> {
     const timeoutMs = 120_000;
     const abortController = new AbortController();
@@ -263,13 +294,15 @@ class A2AAgentTransport implements AgentTransport {
         this.clientCache.set(agentUrl, client);
       }
 
-      const stream = client.sendMessageStream(this.buildPayload(request), {
+      const payload = await this.buildPayload(request, ctx);
+      const stream = client.sendMessageStream(payload, {
         signal: abortController.signal,
       });
 
       for await (const event of stream) {
         const text = extractText(event);
         const files = extractFiles(event);
+        const protocolSessionId = this.extractServerContextId(event);
         const hasContent = text || files.length > 0;
         if (!hasContent) {
           continue;
@@ -281,6 +314,7 @@ class A2AAgentTransport implements AgentTransport {
           yield {
             kind: event.lastChunk ? "final" : "block",
             text: event.lastChunk ? finalText : text,
+            ...(protocolSessionId ? { protocolSessionId } : {}),
             ...(files.length ? { files } : {}),
           };
           if (event.lastChunk) {
@@ -293,9 +327,18 @@ class A2AAgentTransport implements AgentTransport {
         yielded = true;
         if (event.kind === "message") {
           yieldedFinal = true;
-          yield { kind: "final", text, ...(files.length ? { files } : {}) };
+          yield {
+            kind: "final",
+            text,
+            ...(protocolSessionId ? { protocolSessionId } : {}),
+            ...(files.length ? { files } : {}),
+          };
         } else {
-          yield { kind: "partial", text };
+          yield {
+            kind: "partial",
+            text,
+            ...(protocolSessionId ? { protocolSessionId } : {}),
+          };
         }
       }
 
@@ -304,6 +347,9 @@ class A2AAgentTransport implements AgentTransport {
         yield {
           kind: "final",
           text: response.text,
+          ...(response.protocolSessionId
+            ? { protocolSessionId: response.protocolSessionId }
+            : {}),
           ...(response.files?.length ? { files: response.files } : {}),
         };
         return;
@@ -326,8 +372,11 @@ class A2AAgentTransport implements AgentTransport {
     }
   }
 
-  private buildPayload(request: AgentRequest): MessageSendParams {
-    const contextId = request.sessionKey;
+  private async buildPayload(
+    request: AgentRequest,
+    ctx: AgentCallContext,
+  ): Promise<MessageSendParams> {
+    const contextId = ctx.protocolSessionId ?? this.resolveContextId(request);
     const parts: Array<Part> = [];
     if (request.message.trim()) {
       parts.push({ kind: "text", text: request.message });
@@ -343,5 +392,21 @@ class A2AAgentTransport implements AgentTransport {
         metadata: { userId: request.accountId },
       },
     };
+  }
+
+  private resolveContextId(request: AgentRequest): string | undefined {
+    if (this.config.contextIdStrategy !== "server-assigned") {
+      return AgentRequestSession.sessionId(request);
+    }
+
+    return undefined;
+  }
+
+  private extractServerContextId(result: unknown): string | undefined {
+    if (this.config.contextIdStrategy !== "server-assigned") {
+      return undefined;
+    }
+
+    return extractContextId(result);
   }
 }

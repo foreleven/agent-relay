@@ -1,11 +1,13 @@
 import type {
   AgentConfig,
+  A2AContextIdStrategy,
   AgentProtocol,
   AgentProtocolConfig,
   ACPStdioAgentConfig,
 } from "@/lib/api";
 
 export type AgentPermission = NonNullable<ACPStdioAgentConfig["permission"]>;
+export type AgentContextIdStrategy = A2AContextIdStrategy;
 
 export interface AgentProtocolOption {
   value: AgentProtocol;
@@ -17,6 +19,7 @@ export interface AgentConfigFormState {
   name: string;
   protocol: AgentProtocol;
   url: string;
+  contextIdStrategy: AgentContextIdStrategy;
   command: string;
   args: string;
   cwd: string;
@@ -59,6 +62,7 @@ export const EMPTY_AGENT_FORM: AgentConfigFormState = {
   name: "",
   protocol: DEFAULT_AGENT_PROTOCOL,
   url: "",
+  contextIdStrategy: "client-provided",
   command: "",
   args: "",
   cwd: "",
@@ -90,6 +94,7 @@ export class AgentConfigFormMapper {
         name: agent.name,
         protocol: "acp",
         url: "",
+        contextIdStrategy: "client-provided",
         command: config.command,
         args: (config.args ?? []).join("\n"),
         cwd: config.cwd ?? "",
@@ -104,6 +109,7 @@ export class AgentConfigFormMapper {
       name: agent.name,
       protocol: "a2a",
       url: config.url,
+      contextIdStrategy: config.contextIdStrategy ?? "client-provided",
       description: agent.description ?? "",
     };
   }
@@ -161,7 +167,10 @@ export class AgentConfigFormMapper {
 
   private toProtocolConfig(form: AgentConfigFormState): AgentProtocolConfig {
     if (form.protocol === "a2a") {
-      return { url: form.url.trim() };
+      return {
+        url: form.url.trim(),
+        contextIdStrategy: form.contextIdStrategy,
+      };
     }
 
     const timeoutMs = this.parseTimeoutMs(form.timeoutMs);

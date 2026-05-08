@@ -98,8 +98,9 @@ export class ScheduledJobExecutor {
     try {
       const result = await agentClient.send({
         message: normalized.prompt,
-        sessionKey: sessionKey.toMd5(),
+        sessionKey,
         accountId: binding.accountId,
+        binding,
       });
       replyText = result?.text;
     } catch (error) {

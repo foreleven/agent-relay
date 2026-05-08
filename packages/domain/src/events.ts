@@ -10,6 +10,7 @@ import type {
   AgentProtocol,
   AgentProtocolConfig,
 } from "./aggregates/agent-config.js";
+import type { SessionIsolationStrategy } from "./aggregates/channel-binding.js";
 
 // ---------------------------------------------------------------------------
 // ChannelBinding events
@@ -23,6 +24,7 @@ export interface ChannelBindingCreated {
   readonly accountId: string;
   readonly channelConfig: Record<string, unknown>;
   readonly agentId: string;
+  readonly sessionIsolationStrategy?: SessionIsolationStrategy;
   readonly enabled: boolean;
   readonly occurredAt: string;
 }
@@ -36,6 +38,7 @@ export interface ChannelBindingUpdated {
     readonly accountId: string;
     readonly channelConfig: Record<string, unknown>;
     readonly agentId: string;
+    readonly sessionIsolationStrategy: SessionIsolationStrategy;
     readonly enabled: boolean;
   }>;
   readonly occurredAt: string;

@@ -1,4 +1,5 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import type { SessionIsolationStrategy } from "./aggregates/channel-binding.js";
 
 export interface AgentSessionKeyParts {
   readonly agentId: string;
@@ -15,6 +16,16 @@ export interface AgentPeerSessionKeyInput {
   readonly accountId: string;
   readonly peerKind: string;
   readonly peerId: string;
+}
+
+export type SessionIdStrategy =
+  | { type: "request" }
+  | { type: "sessionKey" }
+  | { type: "accountId"; bindingId: string; accountId: string };
+
+export interface SessionIdResult {
+  readonly sessionId: string;
+  readonly persistMapping: boolean;
 }
 
 /** Domain representation of a channel-to-agent session key. */
@@ -62,7 +73,6 @@ export class SessionKey {
     return parseAgentSessionKey(this.raw);
   }
 
-  /** Returns the exact session key string. */
   toString(): string {
     return this.raw;
   }
@@ -72,9 +82,43 @@ export class SessionKey {
     return createHash("md5").update(this.raw).digest("hex");
   }
 
+  /** Derives a downstream agent session id from this gateway session key. */
+  toSessionId(strategy: SessionIdStrategy): string | undefined {
+    switch (strategy.type) {
+      case "request":
+        return undefined;
+      case "accountId":
+        return SessionKey.fromString(
+          `binding:${strategy.bindingId}:account:${strategy.accountId}`,
+        ).toMd5();
+      case "sessionKey":
+        return this.toMd5();
+    }
+  }
+
   /** Alias for callers that prefer noun-style naming. */
   md5(): string {
     return this.toMd5();
+  }
+}
+
+export function sessionIdStrategyFromBinding(input: {
+  readonly strategy?: SessionIsolationStrategy;
+  readonly bindingId: string;
+  readonly accountId: string;
+}): SessionIdStrategy {
+  switch (input.strategy) {
+    case "request":
+      return { type: "request" };
+    case "accountId":
+      return {
+        type: "accountId",
+        bindingId: input.bindingId,
+        accountId: input.accountId,
+      };
+    case "sessionKey":
+    default:
+      return { type: "sessionKey" };
   }
 }
 

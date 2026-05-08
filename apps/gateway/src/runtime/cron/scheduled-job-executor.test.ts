@@ -111,12 +111,14 @@ describe("ScheduledJobExecutor", () => {
     assert.deepEqual(upsertedAgentIds, ["agent-1"]);
     assert.equal(requests[0]?.message, "daily prompt");
     assert.equal(
-      requests[0]?.sessionKey,
-      SessionKey.fromString(
-        "agent:stale-agent:feishu:default:direct:ou_user_1",
-      ).toMd5(),
+      requests[0]?.sessionKey.toString(),
+      "agent:stale-agent:feishu:default:direct:ou_user_1",
     );
     assert.equal(requests[0]?.accountId, "default");
+    assert.deepEqual(requests[0]?.binding, {
+      ...binding,
+      sessionIsolationStrategy: "sessionKey",
+    });
     assert.equal(globalConfigReads, 0);
     assert.deepEqual(deliveries, [
       {

@@ -463,7 +463,7 @@ describe("ConnectionManager", () => {
   test("generates stable compact fallback session keys for missing channel session key", async () => {
     const sessionKeys: string[] = [];
     const agentClient = createAgentClient("http://agent-1", async (request) => {
-      sessionKeys.push(request.sessionKey);
+      sessionKeys.push(request.sessionKey.toString());
       return { text: `echo: ${request.message}` };
     });
     const runtime = createRuntime();
@@ -497,14 +497,14 @@ describe("ConnectionManager", () => {
     }
 
     assert.equal(sessionKeys.length, 2);
-    assert.match(sessionKeys[0] ?? "", /^[a-f0-9]{32}$/);
+    assert.match(sessionKeys[0] ?? "", /^fallback:[a-f0-9]{32}$/);
     assert.equal(sessionKeys[1], sessionKeys[0]);
   });
 
   test("prefers OpenClaw route session key over sender id for agent requests", async () => {
     const sessionKeys: string[] = [];
     const agentClient = createAgentClient("http://agent-1", async (request) => {
-      sessionKeys.push(request.sessionKey);
+      sessionKeys.push(request.sessionKey.toString());
       return { text: `echo: ${request.message}` };
     });
     const runtime = createRuntime();
@@ -536,9 +536,54 @@ describe("ConnectionManager", () => {
     });
 
     assert.deepEqual(sessionKeys, [
-      SessionKey.fromString(
-        "agent:agent-1:feishu:default:direct:ou_user_1",
-      ).toMd5(),
+      "agent:agent-1:feishu:default:direct:ou_user_1",
+    ]);
+  });
+
+  test("passes binding context with agent requests", async () => {
+    const sessionKeys: string[] = [];
+    const bindings: Array<AgentRequest["binding"]> = [];
+    const agentClient = createAgentClient("http://agent-1", async (request) => {
+      sessionKeys.push(request.sessionKey.toString());
+      bindings.push(request.binding);
+      return { text: `echo: ${request.message}` };
+    });
+    const runtime = createRuntime();
+    const manager = new ConnectionManager(
+      null as never,
+      runtime,
+      null as never,
+      createMessageRepository(),
+    );
+    const connection = new Connection({
+      agentClient,
+      binding: { ...binding, sessionIsolationStrategy: "accountId" },
+    });
+
+    Reflect.get(manager, "trackConnection").call(manager, connection);
+
+    for (const sessionKey of ["session-1", "session-2"]) {
+      await runtime.handleChannelReplyEvent({
+        type: "channel.reply.buffered.dispatch",
+        ctx: {
+          BodyForAgent: "hello",
+          Surface: "feishu",
+          AccountId: "default",
+          SessionKey: sessionKey,
+        } as never,
+        dispatcherOptions: {
+          deliver: async () => {},
+        },
+      });
+    }
+
+    assert.deepEqual(sessionKeys, [
+      "session-1",
+      "session-2",
+    ]);
+    assert.deepEqual(bindings, [
+      { ...binding, sessionIsolationStrategy: "accountId" },
+      { ...binding, sessionIsolationStrategy: "accountId" },
     ]);
   });
 

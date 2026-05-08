@@ -91,7 +91,12 @@ function parseAgentConfig(
     const parsed = JSON.parse(value) as unknown;
     const protocol = parseAgentProtocol(protocolValue);
     if (protocol === "a2a" && isA2AAgentConfig(parsed)) {
-      return { url: parsed.url };
+      return {
+        url: parsed.url,
+        contextIdStrategy: parseA2AContextIdStrategy(
+          parsed.contextIdStrategy,
+        ),
+      };
     }
     if (protocol === "acp" && isACPAgentConfig(parsed)) {
       return {
@@ -119,6 +124,12 @@ function parseAgentConfig(
 
 function isA2AAgentConfig(value: unknown): value is A2AAgentConfig {
   return isObject(value) && typeof value.url === "string";
+}
+
+function parseA2AContextIdStrategy(
+  value: unknown,
+): A2AAgentConfig["contextIdStrategy"] {
+  return value === "server-assigned" ? "server-assigned" : "client-provided";
 }
 
 function isACPAgentConfig(value: unknown): value is ACPAgentConfig {

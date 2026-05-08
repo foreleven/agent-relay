@@ -19,6 +19,15 @@ const agentNameSchema = nonEmptyString.refine(isValidAgentName, {
     "Agent name must be a folder-safe name using only letters, numbers, dots, underscores, and hyphens",
 });
 const agentProtocolSchema = z.enum(["a2a", "acp"]);
+const a2aContextIdStrategySchema = z.enum([
+  "client-provided",
+  "server-assigned",
+]);
+const sessionIsolationStrategySchema = z.enum([
+  "request",
+  "sessionKey",
+  "accountId",
+]);
 const acpPermissionSchema = z.enum([
   "allow_once",
   "allow_always",
@@ -27,6 +36,7 @@ const acpPermissionSchema = z.enum([
 ]);
 const a2aAgentConfigSchema = z.object({
   url: nonEmptyString,
+  contextIdStrategy: a2aContextIdStrategySchema.default("client-provided"),
 }).strict();
 const acpStdioAgentConfigSchema = z.object({
   transport: z.literal("stdio"),
@@ -79,6 +89,8 @@ export const createChannelBindingBodySchema: z.ZodType<CreateChannelBindingData>
     accountId: z.string().optional(),
     channelConfig: z.record(z.string(), z.unknown()),
     agentId: nonEmptyString,
+    sessionIsolationStrategy:
+      sessionIsolationStrategySchema.default("sessionKey"),
     enabled: z.boolean().default(true),
   });
 
@@ -89,6 +101,7 @@ export const updateChannelBindingBodySchema: z.ZodType<UpdateChannelBindingData>
     accountId: z.string().optional(),
     channelConfig: z.record(z.string(), z.unknown()).optional(),
     agentId: z.string().optional(),
+    sessionIsolationStrategy: sessionIsolationStrategySchema.optional(),
     enabled: z.boolean().optional(),
   });
 

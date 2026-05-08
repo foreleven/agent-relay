@@ -22,6 +22,9 @@ export const AgentConfigRepository = Symbol.for("ports.AgentConfigRepository");
 export const ChannelMessageRepository = Symbol.for(
   "ports.ChannelMessageRepository",
 );
+export const SessionMappingRepository = Symbol.for(
+  "ports.SessionMappingRepository",
+);
 
 export interface ChannelBindingRepository {
   /** Load the aggregate from the current state table. Returns null if unknown. */
@@ -69,4 +72,15 @@ export interface ChannelMessageRepository {
     agentId?: string;
     limit?: number;
   }): Promise<ChannelMessageRecord[]>;
+}
+
+export interface SessionMappingKey {
+  readonly agentId: string;
+  readonly protocol: "a2a" | "acp";
+  readonly sessionKey: string;
+}
+
+export interface SessionMappingRepository {
+  get(key: SessionMappingKey): Promise<string | null>;
+  set(key: SessionMappingKey, protocolSessionId: string): Promise<void>;
 }
