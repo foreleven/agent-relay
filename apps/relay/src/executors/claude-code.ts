@@ -22,7 +22,7 @@ import type { ClaudeCodeExecutorConfig } from "../types.js";
 // Binary resolution
 // ---------------------------------------------------------------------------
 
-function resolveCaudeCodeBin(): string {
+function resolveClaudeCodeBin(): string {
   // 1. Environment variable override
   if (process.env["CLAUDE_BIN"]) {
     return process.env["CLAUDE_BIN"];
@@ -56,7 +56,7 @@ export class ClaudeCodeExecutor {
   private readonly claudeBin: string;
 
   constructor(private readonly config: ClaudeCodeExecutorConfig) {
-    this.claudeBin = resolveCaudeCodeBin();
+    this.claudeBin = resolveClaudeCodeBin();
   }
 
   /**
@@ -112,7 +112,7 @@ export class ClaudeCodeExecutor {
         }
       });
 
-      // Send message via stdin for reliable Unicode handling
+      // Close stdin immediately since the message is passed as a CLI argument.
       if (proc.stdin) {
         proc.stdin.end();
       }

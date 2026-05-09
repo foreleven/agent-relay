@@ -73,12 +73,16 @@ export class AgentRoutes {
         return c.json({ error: "Unauthorized" }, 401);
       }
 
-      // Build the gateway WS URL from the runtime address
+      // Build the gateway WS URL from the runtime address.
+      // Normalise to an absolute URL first so that the protocol swap is reliable.
       const runtimeAddress = this.config.runtimeAddress;
+      const absoluteAddress = /^https?:\/\//i.test(runtimeAddress)
+        ? runtimeAddress
+        : `http://${runtimeAddress}`;
       const gatewayWsUrl =
-        runtimeAddress
-          .replace(/^https:\/\//, "wss://")
-          .replace(/^http:\/\//, "ws://")
+        absoluteAddress
+          .replace(/^https:\/\//i, "wss://")
+          .replace(/^http:\/\//i, "ws://")
           .replace(/\/$/, "") +
         `/ws/a2a/${agentId}`;
 
