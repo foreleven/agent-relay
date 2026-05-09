@@ -19,6 +19,7 @@ import { WsTunnelConnectionRegistry } from "./ws-tunnel-registry.js";
 import type { GatewayLogger as GatewayLoggerPort } from "../infra/logger.js";
 import { GatewayLogger } from "../infra/logger.js";
 import type { WsTunnelAgentConfig } from "@agent-relay/domain";
+import { extractBearerToken } from "../http/utils/auth.js";
 
 const WS_TUNNEL_PATH_RE = /^\/ws\/a2a\/([^/?#]+)/;
 
@@ -89,11 +90,6 @@ export class WsTunnelRouteHandler {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function extractBearerToken(header: string): string | null {
-  const match = /^Bearer\s+(.+)$/i.exec(header);
-  return match ? (match[1] ?? null) : null;
-}
 
 /** Sends an HTTP error response over the raw socket and destroys it. */
 function rejectUpgrade(socket: Duplex, status: number, text: string): void {

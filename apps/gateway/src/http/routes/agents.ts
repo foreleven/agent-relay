@@ -13,13 +13,7 @@ import {
   registerAgentBodySchema,
   updateAgentBodySchema,
 } from "../schemas/request-schemas.js";
-
-/** Extracts a bearer token from the Authorization header. */
-function extractBearerToken(authHeader: string | undefined): string | null {
-  if (!authHeader) return null;
-  const match = authHeader.match(/^Bearer\s+(.+)$/i);
-  return match ? (match[1] ?? null) : null;
-}
+import { extractBearerToken } from "../utils/auth.js";
 
 /**
  * HTTP adapter for agent configuration CRUD.
@@ -73,18 +67,16 @@ export class AgentRoutes {
         return c.json({ error: "Unauthorized" }, 401);
       }
 
-      // Build the gateway WS URL from the runtime address.
-      // Normalise to an absolute URL first so that the protocol swap is reliable.
+      // Build the gateway WS URL from the runtime address using the URL API
+      // for reliable protocol swapping.
       const runtimeAddress = this.config.runtimeAddress;
       const absoluteAddress = /^https?:\/\//i.test(runtimeAddress)
         ? runtimeAddress
         : `http://${runtimeAddress}`;
+      const parsed = new URL(absoluteAddress);
+      parsed.protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
       const gatewayWsUrl =
-        absoluteAddress
-          .replace(/^https:\/\//i, "wss://")
-          .replace(/^http:\/\//i, "ws://")
-          .replace(/\/$/, "") +
-        `/ws/a2a/${agentId}`;
+        parsed.href.replace(/\/$/, "") + `/ws/a2a/${agentId}`;
 
       return c.json({
         agentId: agent.id,

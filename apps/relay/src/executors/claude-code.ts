@@ -145,7 +145,7 @@ export class ClaudeCodeExecutor {
     }
 
     if (this.config.allowedTools && this.config.allowedTools.length > 0) {
-      args.push("--allowedTools", this.config.allowedTools.join(","));
+      args.push("--allowed-tools", this.config.allowedTools.join(","));
     }
 
     return args;

@@ -1,4 +1,5 @@
 import { serve as honoServe, type ServerType } from "@hono/node-server";
+import { Server as HttpServer } from "node:http";
 import {
   inject,
   injectable,
@@ -122,26 +123,23 @@ export class GatewayServer {
 
       // Attach WebSocket upgrade handler for the ws-tunnel protocol.
       // Node.js http.Server emits 'upgrade' for HTTP → WS upgrades.
-      if (this.wsTunnelRouteHandler !== null) {
-        const httpServer = this.server as { on?: (event: string, ...args: unknown[]) => void };
-        if (typeof httpServer.on === "function") {
-          const handler = this.wsTunnelRouteHandler;
-          httpServer.on(
-            "upgrade",
-            (
-              req: Parameters<WsTunnelRouteHandler["handleUpgrade"]>[0],
-              socket: Parameters<WsTunnelRouteHandler["handleUpgrade"]>[1],
-              head: Parameters<WsTunnelRouteHandler["handleUpgrade"]>[2],
-            ) => {
-              handler.handleUpgrade(req, socket, head).catch(
-                (err: unknown) => {
-                  this.logger.error({ err }, "ws-tunnel upgrade error");
-                  socket.destroy();
-                },
-              );
-            },
-          );
-        }
+      if (this.wsTunnelRouteHandler !== null && this.server instanceof HttpServer) {
+        const handler = this.wsTunnelRouteHandler;
+        this.server.on(
+          "upgrade",
+          (
+            req: Parameters<WsTunnelRouteHandler["handleUpgrade"]>[0],
+            socket: Parameters<WsTunnelRouteHandler["handleUpgrade"]>[1],
+            head: Parameters<WsTunnelRouteHandler["handleUpgrade"]>[2],
+          ) => {
+            handler.handleUpgrade(req, socket, head).catch(
+              (err: unknown) => {
+                this.logger.error({ err }, "ws-tunnel upgrade error");
+                socket.destroy();
+              },
+            );
+          },
+        );
       }
     } catch (error) {
       await this.relayRuntime.shutdown();
