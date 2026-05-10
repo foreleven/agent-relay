@@ -33,7 +33,7 @@ export interface AgentConfig {
   createdAt: string;
 }
 
-export type AgentProtocol = "a2a" | "acp";
+export type AgentProtocol = "a2a" | "acp" | "ws-tunnel";
 
 export interface A2AAgentConfig {
   url: string;
@@ -56,9 +56,28 @@ export interface ACPStdioAgentConfig {
   timeoutMs?: number;
 }
 
+export interface ClaudeCodeExecutorConfig {
+  type: "claude-code";
+  model?: string;
+  systemPrompt?: string;
+  maxTurns?: number;
+  allowedTools?: string[];
+}
+
+export type WsTunnelExecutorConfig = ClaudeCodeExecutorConfig;
+
+export interface WsTunnelAgentConfig {
+  transport: "ws-tunnel";
+  executor: WsTunnelExecutorConfig;
+  timeoutMs?: number;
+  /** Present only in the POST /api/agents creation response. Redacted in GET responses. */
+  relayToken?: string;
+}
+
 export type AgentProtocolConfig =
   | A2AAgentConfig
-  | ACPStdioAgentConfig;
+  | ACPStdioAgentConfig
+  | WsTunnelAgentConfig;
 
 export type RuntimeChannelOwnership =
   | "local"
@@ -299,6 +318,17 @@ export async function deleteAgent(id: string): Promise<void> {
     method: "DELETE",
   }));
   if (!res.ok) throw new Error(await res.text());
+}
+
+export async function regenerateRelayToken(
+  id: string,
+): Promise<{ relayToken: string }> {
+  const res = await fetch(
+    `${BASE}/api/agents/${id}/regenerate-token`,
+    withCredentials({ method: "POST" }),
+  );
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<{ relayToken: string }>;
 }
 
 // ---------------------------------------------------------------------------

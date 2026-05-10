@@ -37,6 +37,9 @@ export function AgentConfigFields({
   const timeoutError = form.timeoutMs.trim()
     ? validation.timeoutMs
     : undefined;
+  const maxTurnsError = form.executorMaxTurns.trim()
+    ? validation.executorMaxTurns
+    : undefined;
 
   return (
     <FieldGroup>
@@ -78,7 +81,7 @@ export function AgentConfigFields({
               value={form.url}
             />
           </FormField>
-        ) : (
+        ) : form.protocol === "acp" ? (
           <FormField
             error={commandError}
             inputId="agent-command"
@@ -99,7 +102,7 @@ export function AgentConfigFields({
               value={form.command}
             />
           </FormField>
-        )}
+        ) : null}
       </div>
 
       {form.protocol === "a2a" && (
@@ -215,6 +218,99 @@ export function AgentConfigFields({
               placeholder="120000"
               value={form.timeoutMs}
             />
+          </FormField>
+        </div>
+      )}
+
+      {form.protocol === "ws-tunnel" && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField inputId="executor-model" label="Model">
+            <Input
+              id="executor-model"
+              onChange={(event) =>
+                onChange({ ...form, executorModel: event.target.value })
+              }
+              placeholder="claude-opus-4-5"
+              value={form.executorModel}
+            />
+            <FieldDescription>
+              Claude model passed to the relay CLI. Defaults to the claude CLI
+              default when left blank.
+            </FieldDescription>
+          </FormField>
+          <FormField
+            error={maxTurnsError}
+            inputId="executor-max-turns"
+            label="Max Turns"
+          >
+            <Input
+              aria-describedby={
+                maxTurnsError ? "executor-max-turns-error" : undefined
+              }
+              aria-invalid={Boolean(maxTurnsError)}
+              id="executor-max-turns"
+              inputMode="numeric"
+              onChange={(event) =>
+                onChange({ ...form, executorMaxTurns: event.target.value })
+              }
+              placeholder="3"
+              value={form.executorMaxTurns}
+            />
+            <FieldDescription>Maximum agentic turns per request.</FieldDescription>
+          </FormField>
+          <FormField
+            className="sm:col-span-2"
+            inputId="executor-system-prompt"
+            label="System Prompt"
+          >
+            <Textarea
+              id="executor-system-prompt"
+              onChange={(event) =>
+                onChange({ ...form, executorSystemPrompt: event.target.value })
+              }
+              placeholder="You are a helpful assistant."
+              rows={3}
+              value={form.executorSystemPrompt}
+            />
+          </FormField>
+          <FormField
+            className="sm:col-span-2"
+            inputId="executor-allowed-tools"
+            label="Allowed Tools"
+          >
+            <Input
+              id="executor-allowed-tools"
+              onChange={(event) =>
+                onChange({ ...form, executorAllowedTools: event.target.value })
+              }
+              placeholder="Read, Write, Bash"
+              value={form.executorAllowedTools}
+            />
+            <FieldDescription>
+              Comma-separated list of tools the Claude executor may use.
+            </FieldDescription>
+          </FormField>
+          <FormField
+            error={timeoutError}
+            inputId="agent-timeout"
+            label="Request Timeout (ms)"
+          >
+            <Input
+              aria-describedby={
+                timeoutError ? "agent-timeout-error" : undefined
+              }
+              aria-invalid={Boolean(timeoutError)}
+              id="agent-timeout"
+              inputMode="numeric"
+              onChange={(event) =>
+                onChange({ ...form, timeoutMs: event.target.value })
+              }
+              placeholder="60000"
+              value={form.timeoutMs}
+            />
+            <FieldDescription>
+              Milliseconds to wait for the relay CLI to respond.
+            </FieldDescription>
           </FormField>
         </div>
       )}

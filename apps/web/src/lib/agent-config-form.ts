@@ -4,6 +4,7 @@ import type {
   AgentProtocol,
   AgentProtocolConfig,
   ACPStdioAgentConfig,
+  WsTunnelAgentConfig,
 } from "@/lib/api";
 
 export type AgentPermission = NonNullable<ACPStdioAgentConfig["permission"]>;
@@ -26,6 +27,11 @@ export interface AgentConfigFormState {
   permission: "" | AgentPermission;
   timeoutMs: string;
   description: string;
+  // ws-tunnel executor fields
+  executorModel: string;
+  executorSystemPrompt: string;
+  executorMaxTurns: string;
+  executorAllowedTools: string;
 }
 
 export type AgentConfigFormField = keyof AgentConfigFormState;
@@ -45,6 +51,12 @@ export const AGENT_PROTOCOL_OPTIONS: AgentProtocolOption[] = [
     value: "acp",
     label: "ACP stdio",
     summary: "Local Agent Client Protocol process launched by the gateway.",
+  },
+  {
+    value: "ws-tunnel",
+    label: "WS Tunnel",
+    summary:
+      "Relay CLI connects from the agent host to the gateway over WebSocket. Use when the agent cannot accept inbound connections.",
   },
 ];
 
@@ -69,6 +81,10 @@ export const EMPTY_AGENT_FORM: AgentConfigFormState = {
   permission: "",
   timeoutMs: "",
   description: "",
+  executorModel: "",
+  executorSystemPrompt: "",
+  executorMaxTurns: "",
+  executorAllowedTools: "",
 };
 
 const AGENT_NAME_PATTERN = /^[A-Za-z0-9._-]+$/;
@@ -89,17 +105,33 @@ export class AgentConfigFormMapper {
 
   fromAgent(agent: AgentConfig): AgentConfigFormState {
     const config = agent.config;
-    if ("transport" in config) {
+    if ("transport" in config && config.transport === "ws-tunnel") {
+      const ws = config as WsTunnelAgentConfig;
+      const executor = ws.executor;
       return {
+        ...EMPTY_AGENT_FORM,
+        name: agent.name,
+        protocol: "ws-tunnel",
+        description: agent.description ?? "",
+        executorModel: executor.model ?? "",
+        executorSystemPrompt: executor.systemPrompt ?? "",
+        executorMaxTurns: executor.maxTurns != null ? String(executor.maxTurns) : "",
+        executorAllowedTools: (executor.allowedTools ?? []).join(", "),
+        timeoutMs: ws.timeoutMs != null ? String(ws.timeoutMs) : "",
+      };
+    }
+
+    if ("transport" in config) {
+      const acp = config as ACPStdioAgentConfig;
+      return {
+        ...EMPTY_AGENT_FORM,
         name: agent.name,
         protocol: "acp",
-        url: "",
-        contextIdStrategy: "client-provided",
-        command: config.command,
-        args: (config.args ?? []).join("\n"),
-        cwd: config.cwd ?? "",
-        permission: config.permission ?? "",
-        timeoutMs: config.timeoutMs ? String(config.timeoutMs) : "",
+        command: acp.command,
+        args: (acp.args ?? []).join("\n"),
+        cwd: acp.cwd ?? "",
+        permission: acp.permission ?? "",
+        timeoutMs: acp.timeoutMs ? String(acp.timeoutMs) : "",
         description: agent.description ?? "",
       };
     }
@@ -139,6 +171,16 @@ export class AgentConfigFormMapper {
       return errors;
     }
 
+    if (form.protocol === "ws-tunnel") {
+      if (!this.hasValidMaxTurns(form.executorMaxTurns)) {
+        errors.executorMaxTurns = "Use a positive integer.";
+      }
+      if (!this.hasValidTimeout(form.timeoutMs)) {
+        errors.timeoutMs = "Use a positive integer.";
+      }
+      return errors;
+    }
+
     if (!form.url.trim()) {
       errors.url = "A2A URL is required.";
     }
@@ -148,14 +190,22 @@ export class AgentConfigFormMapper {
 
   describeTarget(agent: AgentConfig): string {
     const config = agent.config;
+    if ("transport" in config && config.transport === "ws-tunnel") {
+      const ws = config as WsTunnelAgentConfig;
+      return `relay CLI → ${ws.executor.type}`;
+    }
     if ("transport" in config) {
-      return this.buildCommandLine(config.command, config.args ?? []);
+      const acp = config as ACPStdioAgentConfig;
+      return this.buildCommandLine(acp.command, acp.args ?? []);
     }
     return config.url;
   }
 
   transportLabel(config: AgentProtocolConfig): string {
-    return "transport" in config ? config.transport : "";
+    if (!("transport" in config)) return "";
+    // ws-tunnel transport label is already conveyed by the protocol badge
+    if (config.transport === "ws-tunnel") return "";
+    return config.transport;
   }
 
   protocolOption(protocol: AgentProtocol): AgentProtocolOption {
@@ -170,6 +220,30 @@ export class AgentConfigFormMapper {
       return {
         url: form.url.trim(),
         contextIdStrategy: form.contextIdStrategy,
+      };
+    }
+
+    if (form.protocol === "ws-tunnel") {
+      const maxTurns = this.parsePositiveInt(form.executorMaxTurns);
+      const timeoutMs = this.parseTimeoutMs(form.timeoutMs);
+      const allowedTools = form.executorAllowedTools
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+      return {
+        transport: "ws-tunnel",
+        executor: {
+          type: "claude-code",
+          ...(form.executorModel.trim()
+            ? { model: form.executorModel.trim() }
+            : {}),
+          ...(form.executorSystemPrompt.trim()
+            ? { systemPrompt: form.executorSystemPrompt.trim() }
+            : {}),
+          ...(maxTurns != null ? { maxTurns } : {}),
+          ...(allowedTools.length > 0 ? { allowedTools } : {}),
+        },
+        ...(timeoutMs != null ? { timeoutMs } : {}),
       };
     }
 
@@ -196,10 +270,18 @@ export class AgentConfigFormMapper {
   }
 
   private hasValidTimeout(value: string): boolean {
-    return !value.trim() || this.parseTimeoutMs(value) !== undefined;
+    return !value.trim() || this.parsePositiveInt(value) !== undefined;
+  }
+
+  private hasValidMaxTurns(value: string): boolean {
+    return !value.trim() || this.parsePositiveInt(value) !== undefined;
   }
 
   private parseTimeoutMs(value: string): number | undefined {
+    return this.parsePositiveInt(value);
+  }
+
+  private parsePositiveInt(value: string): number | undefined {
     const trimmed = value.trim();
     if (!trimmed) return undefined;
     const parsed = Number(trimmed);
@@ -222,7 +304,9 @@ export function createAgentFormState(
 export function normalizeAgentProtocol(
   protocol: string | undefined,
 ): AgentProtocol {
-  return protocol === "acp" ? "acp" : "a2a";
+  if (protocol === "acp") return "acp";
+  if (protocol === "ws-tunnel") return "ws-tunnel";
+  return "a2a";
 }
 
 export function agentCreateHref(protocol: string): string {

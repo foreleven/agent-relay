@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import { Bot, Pencil, Plus, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Bot, Check, Copy, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 
 import type { AgentConfig } from "@/lib/api";
-import { deleteAgent, listAgents, updateAgent } from "@/lib/api";
+import { deleteAgent, listAgents, regenerateRelayToken, updateAgent } from "@/lib/api";
 import {
   AgentConfigFormMapper,
   createAgentFormState,
@@ -59,6 +59,21 @@ export default function AgentsPage() {
   );
   const [saving, setSaving] = useState(false);
 
+  // Relay token regeneration state
+  const [tokenAgentId, setTokenAgentId] = useState<string | null>(null);
+  const [regeneratedToken, setRegeneratedToken] = useState<string | null>(null);
+  const [regenerating, setRegenerating] = useState(false);
+  const [tokenCopied, setTokenCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) {
+        clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
+
   const refresh = useCallback(async () => {
     try {
       setError(null);
@@ -104,7 +119,40 @@ export default function AgentsPage() {
     }
   }
 
+  function openTokenRotateDialog(agent: AgentConfig) {
+    setTokenAgentId(agent.id);
+    setRegeneratedToken(null);
+    setTokenCopied(false);
+    setRegenerating(false);
+  }
+
+  async function confirmRotateToken() {
+    if (!tokenAgentId) return;
+    setRegenerating(true);
+    try {
+      const result = await regenerateRelayToken(tokenAgentId);
+      setRegeneratedToken(result.relayToken);
+    } catch (err) {
+      setError(String(err));
+      setTokenAgentId(null);
+    } finally {
+      setRegenerating(false);
+    }
+  }
+
+  async function handleCopyToken() {
+    if (!regeneratedToken) return;
+    await navigator.clipboard.writeText(regeneratedToken);
+    setTokenCopied(true);
+    if (copyTimerRef.current !== null) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => {
+      setTokenCopied(false);
+      copyTimerRef.current = null;
+    }, 2000);
+  }
+
   const validation = formMapper.validate(form);
+  const tokenAgent = agents.find((a) => a.id === tokenAgentId);
 
   return (
     <div className="flex w-full flex-col gap-6">
@@ -158,7 +206,7 @@ export default function AgentsPage() {
                   <TableHead>Protocol</TableHead>
                   <TableHead>Target</TableHead>
                   <TableHead>Description</TableHead>
-                  <TableHead className="w-28 text-right">Actions</TableHead>
+                  <TableHead className="w-36 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -181,6 +229,17 @@ export default function AgentsPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-2">
+                        {agent.protocol === "ws-tunnel" && (
+                          <Button
+                            aria-label={`Regenerate relay token for ${agent.name}`}
+                            onClick={() => openTokenRotateDialog(agent)}
+                            size="icon"
+                            title="Regenerate relay token"
+                            variant="outline"
+                          >
+                            <RefreshCw />
+                          </Button>
+                        )}
                         <Button
                           aria-label={`Edit ${agent.name}`}
                           onClick={() => openEdit(agent)}
@@ -207,6 +266,7 @@ export default function AgentsPage() {
         </CardContent>
       </Card>
 
+      {/* Edit agent dialog */}
       <Dialog
         open={Boolean(editingId)}
         onOpenChange={(open) => {
@@ -237,6 +297,80 @@ export default function AgentsPage() {
               {saving ? "Saving..." : "Save"}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Relay token regeneration dialog */}
+      <Dialog
+        open={Boolean(tokenAgentId)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setTokenAgentId(null);
+            setRegeneratedToken(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {regeneratedToken
+                ? "Relay token rotated — save it now"
+                : "Regenerate relay token"}
+            </DialogTitle>
+            <DialogDescription>
+              {regeneratedToken
+                ? `The old token for ${tokenAgent?.name ?? "this agent"} is now invalid. Copy the new token before closing.`
+                : `Rotating the token for ${tokenAgent?.name ?? "this agent"} will disconnect any relay CLI using the old token.`}
+            </DialogDescription>
+          </DialogHeader>
+
+          {regeneratedToken ? (
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-2 rounded-md border border-border bg-muted p-3 font-mono text-xs">
+                <span className="min-w-0 flex-1 break-all">
+                  {regeneratedToken}
+                </span>
+                <Button
+                  className="shrink-0"
+                  onClick={handleCopyToken}
+                  size="sm"
+                  variant="outline"
+                >
+                  {tokenCopied ? (
+                    <Check className="size-3.5" />
+                  ) : (
+                    <Copy className="size-3.5" />
+                  )}
+                </Button>
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  onClick={() => {
+                    setTokenAgentId(null);
+                    setRegeneratedToken(null);
+                  }}
+                >
+                  Done
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setTokenAgentId(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                disabled={regenerating}
+                onClick={confirmRotateToken}
+                variant="destructive"
+              >
+                {regenerating ? "Rotating…" : "Rotate token"}
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
