@@ -37,7 +37,7 @@ type BundledPackageChannelRegistration = {
 
 type BundledOpenClawChannelRegistration = {
   kind: "openclaw-bundled";
-  channelId: "slack" | "telegram";
+  channelId: "telegram";
 };
 
 type DirectPackageChannelRegistration = {
@@ -78,7 +78,7 @@ function resolvePackageRoot(packageName: string): string {
   return dirname(require.resolve(`${packageName}/package.json`));
 }
 
-function resolveOpenClawExtensionRoot(channelId: "slack" | "telegram"): string {
+function resolveOpenClawExtensionRoot(channelId: "telegram"): string {
   return join(resolveOpenClawDistDir(), "extensions", channelId);
 }
 
@@ -350,7 +350,14 @@ const channelRegistrations: ChannelRegistration[] = [
     runtimeSpecifier: "./runtime-setter-api.js",
     runtimeExportName: "setDiscordRuntime",
   },
-  { kind: "openclaw-bundled", channelId: "slack" },
+  {
+    kind: "package-bundled",
+    packageName: "@openclaw/slack",
+    pluginSpecifier: "./channel-plugin-api.js",
+    pluginExportName: "slackPlugin",
+    runtimeSpecifier: "./runtime-setter-api.js",
+    runtimeExportName: "setSlackRuntime",
+  },
   { kind: "openclaw-bundled", channelId: "telegram" },
   {
     kind: "package-bundled",

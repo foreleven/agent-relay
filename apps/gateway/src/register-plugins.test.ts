@@ -68,6 +68,16 @@ describe("registerAllPlugins", () => {
     assert.deepEqual(descriptor.aliases, ["lark"]);
   });
 
+  test("discovers Slack channel metadata from @openclaw/slack", () => {
+    const descriptor = OpenClawChannelPackageDescriptor.fromPackageRoot(
+      dirname(require.resolve("@openclaw/slack/package.json")),
+    );
+
+    assert.equal(descriptor.pluginId, "slack");
+    assert.deepEqual(descriptor.channelIds, ["slack"]);
+    assert.deepEqual(descriptor.extensionSpecifiers, ["./dist/index.js"]);
+  });
+
   test("discovers Tencent-origin channel metadata through OpenClaw package specifiers", () => {
     const qqbot = OpenClawChannelPackageDescriptor.fromPackageRoot(
       dirname(require.resolve("@openclaw/qqbot/package.json")),

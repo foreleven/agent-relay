@@ -32,6 +32,7 @@ export function buildMediaCompat(): PluginRuntimeMedia {
 export function buildTtsCompat(): PluginRuntimeTts {
   return {
     textToSpeech: async () => ({ success: false }),
+    textToSpeechStream: async () => ({ success: false }),
     textToSpeechTelephony: async () => ({ success: false }),
     listVoices: async () => [],
   };
@@ -46,6 +47,7 @@ export function buildMediaUnderstandingCompat(): PluginRuntimeMediaUnderstanding
     runFile: async () => ({ text: undefined }),
     describeImageFile: async () => ({ text: undefined }),
     describeImageFileWithModel: async () => ({ text: "" }),
+    extractStructuredWithModel: async () => ({ text: "" }),
     describeVideoFile: async () => ({ text: undefined }),
     transcribeAudioFile: async () => ({ text: undefined }),
   };

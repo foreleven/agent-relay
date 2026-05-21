@@ -6,7 +6,11 @@
  * runtime connection boundary.
  */
 
-import type { OpenClawConfig, PluginRuntime } from "openclaw/plugin-sdk";
+import type {
+  LlmCompleteParams,
+  OpenClawConfig,
+  PluginRuntime,
+} from "openclaw/plugin-sdk";
 
 import type { AgentFile } from "@agent-relay/agent-transport";
 
@@ -21,16 +25,11 @@ import {
   buildMediaUnderstandingCompat,
   buildTtsCompat,
 } from "./compatibilities/media.js";
+import { buildStateCompat } from "./compatibilities/state.js";
 import { buildSystemCompat } from "./compatibilities/system.js";
 import { buildTasksCompat } from "./compatibilities/tasks.js";
 
-export interface ConfigProvider {
-  loadConfig(): OpenClawConfig;
-  writeConfigFile?(cfg: OpenClawConfig, options?: unknown): Promise<unknown>;
-  current?(): OpenClawConfig;
-  mutateConfigFile?(params: unknown): Promise<unknown>;
-  replaceConfigFile?(params: unknown): Promise<unknown>;
-}
+export type ConfigProvider = PluginRuntime["config"];
 
 type ChannelReplyDispatchParams = Parameters<
   PluginRuntime["channel"]["reply"]["dispatchReplyFromConfig"]
@@ -98,7 +97,7 @@ export interface ReplyEventDispatcher {
   ): Promise<ChannelReplyDispatchResult>;
 }
 
-const OPENCLAW_PLUGIN_API_VERSION = "2026.5.2";
+const OPENCLAW_PLUGIN_API_VERSION = "2026.5.19";
 
 // ---------------------------------------------------------------------------
 // OpenClawPluginRuntime class
@@ -107,6 +106,7 @@ const OPENCLAW_PLUGIN_API_VERSION = "2026.5.2";
 /** Class-based OpenClaw plugin runtime that delegates channel reply events. */
 export class OpenClawPluginRuntime {
   private replyEventDispatcher: ReplyEventDispatcher | null = null;
+  private readonly stateCompat = buildStateCompat();
 
   constructor(private readonly options: PluginRuntimeOptions) {}
 
@@ -175,9 +175,7 @@ export class OpenClawPluginRuntime {
           error: () => {},
         }),
       },
-      state: {
-        resolveStateDir: () => "/tmp/agent-relay",
-      },
+      state: this.stateCompat,
       modelAuth: {
         getApiKeyForModel: async () => ({
           source: "stub",
@@ -201,10 +199,29 @@ export class OpenClawPluginRuntime {
         getSession: async () => ({ messages: [] }),
         deleteSession: async () => {},
       },
+      nodes: {
+        list: async () => ({ nodes: [] }),
+        invoke: async () => undefined,
+      },
       channel: buildChannelCompat((event) =>
         this.handleChannelReplyEvent(event),
       ),
-    } as unknown as PluginRuntime;
+      llm: {
+        complete: async (params: LlmCompleteParams) => {
+          return {
+            text: "",
+            provider: "stub",
+            model: params.model ?? "stub",
+            agentId: params.agentId ?? "unknown",
+            usage: {},
+            audit: {
+              caller: { kind: "unknown" as const },
+              ...(params.purpose ? { purpose: params.purpose } : {}),
+            },
+          };
+        },
+      },
+    } as PluginRuntime;
   }
 
   private async completeUnhandledReplyEvent(

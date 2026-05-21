@@ -273,6 +273,15 @@ function bindRuntime(
       () =>
         new OpenClawPluginRuntime({
           config: {
+            current: () => container.get(RuntimeOpenClawConfigProjection).getConfig(),
+            mutateConfigFile: async (newConfig) => {
+              // In this implementation, the config file is immutable at runtime.
+              // To change config, the process must be restarted with new overrides.
+              throw new Error("Config mutation is not supported");
+            },
+            replaceConfigFile: async (newConfig) => {
+              throw new Error("Config mutation is not supported");
+            },
             loadConfig: () =>
               container.get(RuntimeOpenClawConfigProjection).getConfig(),
             writeConfigFile: async () => {

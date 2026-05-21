@@ -18,6 +18,7 @@
 import type {
   ChannelAccountSnapshot,
   ChannelPlugin,
+  OpenClawConfig,
   OpenClawPluginApi,
   PluginRuntime,
 } from "openclaw/plugin-sdk";
@@ -127,15 +128,19 @@ export class OpenClawPluginHost {
     Array<(...args: any[]) => unknown>
   >();
 
+  private runtime: PluginRuntime;
+
   /**
    * @param getConfig  Callback that returns the current OpenClaw-compatible
    *   channel config.  Injected by the gateway so this package has no
    *   dependency on the store implementation.
    */
   constructor(
-    private readonly runtime: OpenClawPluginRuntime,
+    readonly _runtime: OpenClawPluginRuntime,
     private readonly logger: OpenClawHostLogger = defaultLogger,
-  ) {}
+  ) {
+    this.runtime = _runtime.asPluginRuntime();
+  }
 
   // -------------------------------------------------------------------------
   // Public API
@@ -186,8 +191,9 @@ export class OpenClawPluginHost {
 
     const { accountId, verbose } = params;
     const runtime = this.buildChannelLoginRuntime(params.runtime);
+    const config = this.runtime.config.current() as OpenClawConfig;
     await login({
-      cfg: this.runtime.getConfig(),
+      cfg: config,
       accountId,
       verbose,
       runtime,
@@ -239,12 +245,13 @@ export class OpenClawPluginHost {
       callbacks.onStatus?.(status);
       bindingLogger.info({ status }, "channel account status updated");
     };
-
+    const config = this.runtime.config.current() as OpenClawConfig;
     const startPromise = channel.gateway.startAccount({
-      cfg: this.runtime.getConfig(),
+      cfg: config,
       accountId,
       account: binding.channelConfig,
       runtime: runtimeEnv,
+      channelRuntime: this.runtime.channel,
       abortSignal,
       getStatus: (): ChannelAccountSnapshot => {
         return { accountId };
@@ -320,14 +327,47 @@ export class OpenClawPluginHost {
   private buildPluginApi(): OpenClawPluginApi {
     const host = this;
     const logger = this.asChannelLogSink(this.logger.child({ component: "openclaw-host" }));
-    const config = host.runtime.getConfig();
+    const config = host.runtime.config.current() as OpenClawConfig;
 
     const on: OpenClawPluginApi["on"] = (event, handler) => {
       const existing = host.hookHandlers.get(event) ?? [];
       existing.push(handler);
       host.hookHandlers.set(event, existing);
     };
-    const runtime = host.runtime.asPluginRuntime();
+    const registerSessionExtension: OpenClawPluginApi["registerSessionExtension"] =
+      () => {};
+    const enqueueNextTurnInjection: OpenClawPluginApi["enqueueNextTurnInjection"] =
+      async (injection) => ({
+        enqueued: false,
+        id: "",
+        sessionKey: injection.sessionKey,
+      });
+    const registerSessionSchedulerJob: OpenClawPluginApi["registerSessionSchedulerJob"] =
+      () => undefined;
+    const sendSessionAttachment: OpenClawPluginApi["sendSessionAttachment"] =
+      async () => ({
+        ok: false,
+        error: "session attachments are not supported",
+      });
+    const scheduleSessionTurn: OpenClawPluginApi["scheduleSessionTurn"] =
+      async () => undefined;
+    const unscheduleSessionTurnsByTag: OpenClawPluginApi["unscheduleSessionTurnsByTag"] =
+      async () => ({ removed: 0, failed: 0 });
+    const registerSessionAction: OpenClawPluginApi["registerSessionAction"] =
+      () => {};
+    const registerControlUiDescriptor: OpenClawPluginApi["registerControlUiDescriptor"] =
+      () => {};
+    const registerAgentEventSubscription: OpenClawPluginApi["registerAgentEventSubscription"] =
+      () => {};
+    const emitAgentEvent: OpenClawPluginApi["emitAgentEvent"] = () => ({
+      emitted: false,
+      reason: "agent event emission is not supported",
+    });
+    const setRunContext: OpenClawPluginApi["setRunContext"] = () => false;
+    const getRunContext: OpenClawPluginApi["getRunContext"] = () => undefined;
+    const clearRunContext: OpenClawPluginApi["clearRunContext"] = () => {};
+    const registerRuntimeLifecycle: OpenClawPluginApi["registerRuntimeLifecycle"] =
+      () => {};
 
     const api: OpenClawPluginApi = {
       // ---- Identity -------------------------------------------------------
@@ -343,9 +383,37 @@ export class OpenClawPluginHost {
         return config;
       },
       get runtime() {
-        return runtime;
+        return host.runtime;
       },
       pluginConfig: {},
+      session: {
+        state: { registerSessionExtension },
+        workflow: {
+          enqueueNextTurnInjection,
+          registerSessionSchedulerJob,
+          sendSessionAttachment,
+          scheduleSessionTurn,
+          unscheduleSessionTurnsByTag,
+        },
+        controls: {
+          registerSessionAction,
+          registerControlUiDescriptor,
+        },
+      },
+      agent: {
+        events: {
+          registerAgentEventSubscription,
+          emitAgentEvent,
+        },
+      },
+      runContext: {
+        setRunContext,
+        getRunContext,
+        clearRunContext,
+      },
+      lifecycle: {
+        registerRuntimeLifecycle,
+      },
 
       logger,
 
@@ -385,8 +453,10 @@ export class OpenClawPluginHost {
       registerTool: () => {},
       registerHook: () => {},
       registerHttpRoute: () => {},
+      registerHostedMediaResolver: () => {},
       registerGatewayMethod: () => {},
       registerCli: () => {},
+      registerNodeCliFeature: () => {},
       registerReload: () => {},
       registerNodeHostCommand: () => {},
       registerNodeInvokePolicy: () => {},
@@ -399,6 +469,7 @@ export class OpenClawPluginHost {
       registerMigrationProvider: () => {},
       registerAutoEnableProbe: () => {},
       registerProvider: () => {},
+      registerModelCatalogProvider: () => {},
       registerSpeechProvider: () => {},
       registerRealtimeTranscriptionProvider: () => {},
       registerRealtimeVoiceProvider: () => {},
@@ -416,21 +487,22 @@ export class OpenClawPluginHost {
       registerAgentHarness: () => {},
       registerCodexAppServerExtensionFactory: () => {},
       registerAgentToolResultMiddleware: () => {},
-      registerSessionExtension: () => {},
-      enqueueNextTurnInjection: async (injection) => ({
-        enqueued: false,
-        id: "",
-        sessionKey: injection.sessionKey,
-      }),
+      registerSessionExtension,
+      enqueueNextTurnInjection,
       registerTrustedToolPolicy: () => {},
       registerToolMetadata: () => {},
-      registerControlUiDescriptor: () => {},
-      registerRuntimeLifecycle: () => {},
-      registerAgentEventSubscription: () => {},
-      setRunContext: () => false,
-      getRunContext: () => undefined,
-      clearRunContext: () => {},
-      registerSessionSchedulerJob: () => undefined,
+      registerControlUiDescriptor,
+      registerRuntimeLifecycle,
+      registerAgentEventSubscription,
+      emitAgentEvent,
+      setRunContext,
+      getRunContext,
+      clearRunContext,
+      registerSessionSchedulerJob,
+      registerSessionAction,
+      sendSessionAttachment,
+      scheduleSessionTurn,
+      unscheduleSessionTurnsByTag,
       registerDetachedTaskRuntime: () => {},
       registerMemoryCapability: () => {},
       registerMemoryPromptSection: () => {},

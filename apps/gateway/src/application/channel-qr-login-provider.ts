@@ -1,4 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { readdir } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { inject, injectable } from "inversify";
 
 import {
@@ -22,6 +26,58 @@ const WECHAT_DEFAULT_CDN_BASE_URL = "https://novac2c.cdn.weixin.qq.com/c2c";
 const WECHAT_DEFAULT_BOT_TYPE = "3";
 const WECHAT_QR_TTL_MS = 5 * 60_000;
 const WECHAT_QR_POLL_TIMEOUT_MS = 35_000;
+const FEISHU_APP_REGISTRATION_FILE_PATTERN = /^app-registration-.*\.js$/;
+const requireFromHere = createRequire(import.meta.url);
+
+let feishuAppRegistrationModulePromise:
+  | Promise<FeishuAppRegistrationModule>
+  | undefined;
+
+type FeishuAppRegistrationModule = {
+  initAppRegistration(channelType: "feishu"): Promise<void>;
+  beginAppRegistration(channelType: "feishu"): Promise<{
+    qrUrl: string;
+    deviceCode: string;
+    expireIn: number;
+    interval: number;
+  }>;
+  pollAppRegistration(params: {
+    deviceCode: string;
+    interval: number;
+    expireIn: number;
+    initialDomain: "feishu";
+    tp: "ob_app";
+  }): Promise<
+    | {
+        status: "success";
+        result: { appId: string; appSecret: string; openId?: string };
+      }
+    | { status: string }
+  >;
+};
+
+export async function importFeishuAppRegistration(): Promise<FeishuAppRegistrationModule> {
+  feishuAppRegistrationModulePromise ??= import(
+    await resolveFeishuAppRegistrationModulePath()
+  ) as Promise<FeishuAppRegistrationModule>;
+  return feishuAppRegistrationModulePromise;
+}
+
+async function resolveFeishuAppRegistrationModulePath(): Promise<string> {
+  const packageJsonPath = requireFromHere.resolve("@openclaw/feishu/package.json");
+  const distDir = join(dirname(packageJsonPath), "dist");
+  const files = await readdir(distDir);
+  const moduleFile = files.find((file) =>
+    FEISHU_APP_REGISTRATION_FILE_PATTERN.test(file),
+  );
+  if (!moduleFile) {
+    throw new Error(
+      "Could not find @openclaw/feishu dist app-registration module",
+    );
+  }
+
+  return pathToFileURL(join(distDir, moduleFile)).href;
+}
 
 export interface ChannelQrAuthGateway {
   startChannelQrLogin(
@@ -62,8 +118,7 @@ export class FeishuQrLoginProvider implements ChannelQrLoginProvider {
     params: ChannelQrLoginStartParams,
   ): Promise<ChannelQrLoginStartResult> {
     const accountId = this.accountIdGenerator.resolve(params.accountId);
-    const registration =
-      await import("@openclaw/feishu/src/app-registration.js");
+    const registration = await importFeishuAppRegistration();
     await registration.initAppRegistration("feishu");
     const begin = await registration.beginAppRegistration("feishu");
     const qrDataUrl = await QRCode.toDataURL(begin.qrUrl, {
@@ -89,8 +144,7 @@ export class FeishuQrLoginProvider implements ChannelQrLoginProvider {
     params: ChannelQrLoginWaitParams,
   ): Promise<ChannelQrLoginWaitResult> {
     const session = decodeFeishuSetupSession(params.sessionKey);
-    const registration =
-      await import("@openclaw/feishu/src/app-registration.js");
+    const registration = await importFeishuAppRegistration();
     const expireIn = Math.min(
       session.expireIn,
       Math.max(
@@ -106,7 +160,7 @@ export class FeishuQrLoginProvider implements ChannelQrLoginProvider {
       tp: "ob_app",
     });
 
-    if (outcome.status !== "success") {
+    if (!("result" in outcome)) {
       return {
         connected: false,
         message: `Feishu scan status: ${outcome.status}`,

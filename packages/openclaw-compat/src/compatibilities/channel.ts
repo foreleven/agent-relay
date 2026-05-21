@@ -10,6 +10,7 @@ import * as textRuntimeSdk from "openclaw/plugin-sdk/text-runtime";
 import type { PluginRuntime } from "openclaw/plugin-sdk";
 
 import type { ChannelReplyEvent } from "../plugin-runtime.js";
+import type { BuildChannelInboundEventContextParams, BuiltChannelInboundEventContext } from "openclaw/plugin-sdk/channel-inbound";
 
 type PluginRuntimeChannel = PluginRuntime["channel"];
 
@@ -201,8 +202,9 @@ async function runResolvedChannelTurn(params: any): Promise<any> {
   });
 }
 
-function buildChannelTurnContext(params: any): any {
+function buildChannelTurnContext(params: BuildChannelInboundEventContextParams): BuiltChannelInboundEventContext {
   return replyDispatchRuntime.finalizeInboundContext({
+    InboundEventKind: params.message.inboundEventKind?? "user_request",
     Body: params.message?.body ?? params.message?.rawBody,
     BodyForAgent: params.message?.bodyForAgent ?? params.message?.rawBody,
     RawBody: params.message?.rawBody,
@@ -399,6 +401,9 @@ export function buildChannelCompat(
       },
     },
     media: {
+      readRemoteMediaBuffer: async () => {
+        throw new Error("channel.media.readRemoteMediaBuffer not supported");
+      },
       fetchRemoteMedia: async (
         params: Parameters<
           PluginRuntimeChannel["media"]["fetchRemoteMedia"]
@@ -419,6 +424,12 @@ export function buildChannelCompat(
           size: 0,
           contentType: contentType,
         };
+      },
+      saveRemoteMedia: async () => {
+        throw new Error("channel.media.saveRemoteMedia not supported");
+      },
+      saveResponseMedia: async () => {
+        throw new Error("channel.media.saveResponseMedia not supported");
       },
     },
     activity: {
@@ -477,6 +488,7 @@ export function buildChannelCompat(
     outbound: { loadAdapter: async () => undefined },
     turn: {
       run: runChannelTurn,
+      runAssembled: dispatchAssembledChannelTurn,
       runResolved: runResolvedChannelTurn,
       buildContext: buildChannelTurnContext,
       runPrepared: runPreparedChannelTurn,

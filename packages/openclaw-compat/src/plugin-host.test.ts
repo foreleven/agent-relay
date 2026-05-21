@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import type { ChannelBindingSnapshot } from "@agent-relay/domain";
+
 import { OpenClawPluginHost, OpenClawPluginRuntime } from "./index.js";
 
 function createHost() {
@@ -80,6 +82,56 @@ describe("OpenClawPluginHost channel login", () => {
     await assert.rejects(
       () => host.runChannelLogin("plain", { accountId: "default" }),
       /Channel login is not supported for plain/,
+    );
+  });
+});
+
+describe("OpenClawPluginHost channel lifecycle", () => {
+  test("injects channel runtime when starting a binding", async () => {
+    const host = createHost();
+    let receivedChannelRuntime: unknown;
+
+    host.registerPlugin((api) => {
+      api.registerChannel({
+        id: "openclaw-example",
+        meta: createMeta("openclaw-example", ["example"]),
+        capabilities: { chatTypes: [] },
+        config: {
+          listAccountIds: () => [],
+          resolveAccount: () => ({}),
+        },
+        gateway: {
+          startAccount: async (ctx) => {
+            receivedChannelRuntime = ctx.channelRuntime;
+          },
+        },
+      });
+    });
+
+    const binding: ChannelBindingSnapshot = {
+      id: "binding-1",
+      name: "Example",
+      channelType: "openclaw-example",
+      accountId: "default",
+      channelConfig: {},
+      agentId: "agent-1",
+      enabled: true,
+      createdAt: new Date(0).toISOString(),
+    };
+
+    await host.startChannelBinding(binding, new AbortController().signal);
+
+    assert.equal(typeof receivedChannelRuntime, "object");
+    assert.notEqual(receivedChannelRuntime, null);
+    assert.equal(
+      typeof (receivedChannelRuntime as { reply?: { dispatchReplyFromConfig?: unknown } })
+        .reply?.dispatchReplyFromConfig,
+      "function",
+    );
+    assert.equal(
+      typeof (receivedChannelRuntime as { routing?: { resolveAgentRoute?: unknown } })
+        .routing?.resolveAgentRoute,
+      "function",
     );
   });
 });

@@ -152,6 +152,15 @@ class BindingChannelPushProbe {
       config: {
         loadConfig: () => cfg as never,
         current: () => cfg as never,
+        mutateConfigFile: async () => {
+          throw new Error("Config mutation is not supported");
+        },
+        replaceConfigFile: async () => {
+          throw new Error("Config mutation is not supported");
+        },
+        writeConfigFile: async () => {
+          throw new Error("Config mutation is not supported");
+        },
       },
     });
     const host = new OpenClawPluginHost(runtime);

@@ -104,13 +104,20 @@ export class OpenClawChannelPackageDescriptor {
         : packageChannelId
           ? [packageChannelId]
           : [pluginId];
+    const runtimeExtensionSpecifiers = asStringArray(
+      openclaw["runtimeExtensions"],
+    );
+    const sourceExtensionSpecifiers = asStringArray(openclaw["extensions"]);
 
     return new OpenClawChannelPackageDescriptor({
       pluginId,
       packageName: asString(packageJson["name"]) ?? pluginId,
       channelIds: [...new Set(resolvedChannelIds)],
       aliases: [...new Set(asStringArray(packageChannel["aliases"]))],
-      extensionSpecifiers: asStringArray(openclaw["extensions"]),
+      extensionSpecifiers:
+        runtimeExtensionSpecifiers.length > 0
+          ? runtimeExtensionSpecifiers
+          : sourceExtensionSpecifiers,
     });
   }
 }

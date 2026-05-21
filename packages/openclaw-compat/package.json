@@ -10,6 +10,6 @@
   "dependencies": {
     "@agent-relay/agent-transport": "workspace:*",
     "@agent-relay/domain": "workspace:*",
-    "openclaw": "^2026.5.2"
+    "openclaw": "^2026.5.19"
   }
 }

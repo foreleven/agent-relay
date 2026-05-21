@@ -6,7 +6,10 @@ import {
   UnsupportedChannelQrAuthError,
 } from "./channel-auth-service.js";
 import type { AccountIdGenerator } from "./account-id-generator.js";
-import { WechatQrLoginProvider } from "./channel-qr-login-provider.js";
+import {
+  importFeishuAppRegistration,
+  WechatQrLoginProvider,
+} from "./channel-qr-login-provider.js";
 
 const accountIds = {
   resolve: (accountId: string | undefined) => accountId?.trim() || "generated",
@@ -130,5 +133,15 @@ describe("WechatQrLoginProvider", () => {
       token: "bot-token",
       userId: "user@im.wechat",
     });
+  });
+});
+
+describe("FeishuQrLoginProvider", () => {
+  test("loads the packaged Feishu app registration runtime module", async () => {
+    const registration = await importFeishuAppRegistration();
+
+    assert.equal(typeof registration.initAppRegistration, "function");
+    assert.equal(typeof registration.beginAppRegistration, "function");
+    assert.equal(typeof registration.pollAppRegistration, "function");
   });
 });
