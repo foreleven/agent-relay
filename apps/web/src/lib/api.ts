@@ -112,6 +112,57 @@ export interface RuntimeChannelStatus {
 
 export type ChannelMessageDirection = "input" | "output";
 
+export type SandboxProviderName = "aio-sandbox";
+export type SandboxStatus =
+  | "draft"
+  | "starting"
+  | "running"
+  | "stopping"
+  | "stopped"
+  | "failed";
+
+export interface SandboxSpec {
+  image?: string;
+  resources?: {
+    cpu?: number;
+    memoryMb?: number;
+    diskMb?: number;
+  };
+  env?: Array<{
+    name: string;
+    value?: string;
+    secretRef?: string;
+  }>;
+  workspace?: {
+    path?: string;
+  };
+  initScript?: {
+    shell?: "sh" | "bash";
+    content: string;
+    timeoutMs?: number;
+  };
+  relay?: {
+    command?: string;
+    args?: string[];
+    restartPolicy?: "never" | "on-failure" | "always";
+  };
+  ttlSeconds?: number;
+  autoStart?: boolean;
+}
+
+export interface Sandbox {
+  id: string;
+  agentId: string;
+  name: string;
+  provider: SandboxProviderName;
+  spec: SandboxSpec;
+  status: SandboxStatus;
+  providerInstanceId?: string;
+  lastError?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ChannelMessage {
   id?: string;
   channelBindingId: string;
@@ -404,6 +455,72 @@ export async function updateScheduledJob(
 
 export async function deleteScheduledJob(id: string): Promise<void> {
   const res = await fetch(`${BASE}/api/scheduled-jobs/${id}`, withCredentials({
+    method: "DELETE",
+  }));
+  if (!res.ok) throw new Error(await res.text());
+}
+
+// ---------------------------------------------------------------------------
+// Sandboxes
+// ---------------------------------------------------------------------------
+
+export async function listSandboxes(): Promise<Sandbox[]> {
+  const res = await fetch(`${BASE}/api/sandboxes`, withCredentials());
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<Sandbox[]>;
+}
+
+export async function createSandbox(
+  data: Omit<Sandbox, "id" | "createdAt" | "updatedAt" | "status">,
+): Promise<Sandbox> {
+  const res = await fetch(`${BASE}/api/sandboxes`, withCredentials({
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  }));
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<Sandbox>;
+}
+
+export async function updateSandbox(
+  id: string,
+  data: Partial<Pick<Sandbox, "name" | "spec">>,
+): Promise<Sandbox> {
+  const res = await fetch(`${BASE}/api/sandboxes/${id}`, withCredentials({
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  }));
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<Sandbox>;
+}
+
+export async function startSandbox(id: string): Promise<Sandbox> {
+  const res = await fetch(`${BASE}/api/sandboxes/${id}/start`, withCredentials({
+    method: "POST",
+  }));
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<Sandbox>;
+}
+
+export async function stopSandbox(id: string): Promise<Sandbox> {
+  const res = await fetch(`${BASE}/api/sandboxes/${id}/stop`, withCredentials({
+    method: "POST",
+  }));
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<Sandbox>;
+}
+
+export async function refreshSandbox(id: string): Promise<Sandbox> {
+  const res = await fetch(`${BASE}/api/sandboxes/${id}/refresh`, withCredentials({
+    method: "POST",
+  }));
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<Sandbox>;
+}
+
+export async function deleteSandbox(id: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/sandboxes/${id}`, withCredentials({
     method: "DELETE",
   }));
   if (!res.ok) throw new Error(await res.text());

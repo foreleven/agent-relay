@@ -71,8 +71,27 @@ model Agent {
 
   bindings        ChannelBinding[]
   sessionMappings SessionMapping[]
+  sandboxes       Sandbox[]
 
   @@map("agents")
+}
+
+model Sandbox {
+  id                 String   @id @default(uuid())
+  agentId            String   @map("agent_id")
+  name               String
+  provider           String
+  specJson           String   @default("{}") @map("spec_json")
+  status             String   @default("stopped")
+  providerInstanceId String?  @map("provider_instance_id")
+  lastError          String?  @map("last_error")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([agentId])
+  @@map("sandboxes")
 }
 
 model SessionMapping {

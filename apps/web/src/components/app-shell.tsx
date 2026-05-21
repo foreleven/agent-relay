@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Bot, CalendarClock, LayoutDashboard, LogOut, MessageSquareText, RadioTower, User } from "lucide-react";
+import { Bot, CalendarClock, Container, LayoutDashboard, LogOut, MessageSquareText, RadioTower, User } from "lucide-react";
 
 import { getMe, logout } from "@/lib/api";
 import type { AccountInfo } from "@/lib/api";
@@ -15,6 +15,7 @@ const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/channels", label: "Channels", icon: RadioTower },
   { href: "/agents", label: "Agents", icon: Bot },
+  { href: "/sandboxes", label: "Sandboxes", icon: Container },
   { href: "/messages", label: "Messages", icon: MessageSquareText },
   { href: "/scheduled-tasks", label: "Scheduled Tasks", icon: CalendarClock },
 ];

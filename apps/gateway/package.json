@@ -17,6 +17,7 @@
     "@agent-relay/domain": "workspace:*",
     "@agent-relay/event-store": "workspace:*",
     "@agent-relay/openclaw-compat": "workspace:*",
+    "@byted/sandbox-sdk": "^1.1.1",
     "@openclaw/discord": "2026.5.2",
     "@openclaw/feishu": "2026.5.2",
     "@openclaw/qqbot": "2026.5.2",

@@ -5,4 +5,5 @@ export * from "./aggregates/channel-binding.js";
 export * from "./aggregates/agent-config.js";
 export * from "./messages.js";
 export * from "./scheduled-job.js";
+export * from "./sandbox.js";
 export * from "./repositories.js";

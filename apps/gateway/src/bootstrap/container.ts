@@ -17,6 +17,7 @@ import {
   AgentConfigRepository,
   ChannelBindingRepository,
   ChannelMessageRepository,
+  SandboxRepository,
   SessionMappingRepository,
 } from "@agent-relay/domain";
 import { AgentService } from "../application/agent-service.js";
@@ -36,6 +37,7 @@ import {
 } from "../application/channel-qr-login-provider.js";
 import { ChannelBindingService } from "../application/channel-binding-service.js";
 import { RuntimeStatusService } from "../application/runtime-status-service.js";
+import { SandboxService } from "../application/sandbox-service.js";
 import { GatewayServer } from "./gateway-server.js";
 import { GatewayApp, GatewayWebDir, HonoGatewayApp } from "../http/app.js";
 import { AgentRoutes } from "../http/routes/agents.js";
@@ -44,6 +46,7 @@ import { ChannelRoutes } from "../http/routes/channels.js";
 import { MessageRoutes } from "../http/routes/messages.js";
 import { RuntimeStatusRoutes } from "../http/routes/runtime-status.js";
 import { ScheduledJobRoutes } from "../http/routes/scheduled-jobs.js";
+import { SandboxRoutes } from "../http/routes/sandboxes.js";
 import { AgentConfigStateRepository } from "../infra/agent-config-repo.js";
 import { AccountStateRepository } from "../infra/account-repo.js";
 import { AccountCredentialsStateRepository } from "../infra/account-credentials-repo.js";
@@ -58,6 +61,7 @@ import {
 } from "../infra/logger.js";
 import { RedisClientService } from "../infra/redis-client.js";
 import { RuntimeNodeStateRepository } from "../infra/runtime-node-repo.js";
+import { SandboxStateRepository } from "../infra/sandbox-repo.js";
 import { PluginRegistrationService } from "../register-plugins.js";
 import { AgentClientRegistry } from "../runtime/agent-client-registry.js";
 import { AgentClientFactory } from "../runtime/agent-clients.js";
@@ -85,6 +89,12 @@ import { BunQueueScheduledJobWorkerService } from "../runtime/cron/bunqueue-sche
 import { ScheduledJobExecutor } from "../runtime/cron/scheduled-job-executor.js";
 import { WsTunnelConnectionRegistry } from "../runtime/ws-tunnel-registry.js";
 import { WsTunnelRouteHandler } from "../runtime/ws-tunnel-route-handler.js";
+import { AioSandboxProvider } from "../runtime/sandbox/aio-sandbox-provider.js";
+import {
+  SandboxProvider,
+  type SandboxProvider as SandboxProviderPort,
+} from "../runtime/sandbox/provider.js";
+import { SandboxRuntimeManager } from "../runtime/sandbox/sandbox-runtime-manager.js";
 import type { GatewayConfigSnapshot } from "./config.js";
 import {
   buildGatewayConfig,
@@ -152,6 +162,7 @@ function bindInfrastructure(
   container.bind(SessionMappingStateRepository).toSelf().inSingletonScope();
   container.bind(BunQueueScheduledJobService).toSelf().inSingletonScope();
   container.bind(RuntimeNodeStateRepository).toSelf().inSingletonScope();
+  container.bind(SandboxStateRepository).toSelf().inSingletonScope();
 
   if (config.clusterMode) {
     container.bind(RedisClientService).toSelf().inSingletonScope();
@@ -176,6 +187,7 @@ function bindApplication(container: Container): void {
   container
     .bind(SessionMappingRepository)
     .toService(SessionMappingStateRepository);
+  container.bind(SandboxRepository).toService(SandboxStateRepository);
   container
     .bind<ScheduledJobServicePort>(ScheduledJobService)
     .toService(BunQueueScheduledJobService);
@@ -198,6 +210,7 @@ function bindApplication(container: Container): void {
     .inSingletonScope();
   container.bind(AgentService).toSelf().inSingletonScope();
   container.bind(RuntimeStatusService).toSelf().inSingletonScope();
+  container.bind(SandboxService).toSelf().inSingletonScope();
 }
 
 function bindRuntime(
@@ -244,6 +257,11 @@ function bindRuntime(
     .inSingletonScope();
 
   container.bind(WsTunnelRouteHandler).toSelf().inSingletonScope();
+  container.bind(AioSandboxProvider).toSelf().inSingletonScope();
+  container
+    .bind<SandboxProviderPort>(SandboxProvider)
+    .toService(AioSandboxProvider);
+  container.bind(SandboxRuntimeManager).toSelf().inSingletonScope();
   container.bind(AgentClientFactory).toSelf().inSingletonScope();
 
   container.bind(AgentClientRegistry).toSelf().inSingletonScope();
@@ -337,6 +355,7 @@ function bindHttp(container: Container): void {
   container.bind(MessageRoutes).toSelf().inSingletonScope();
   container.bind(RuntimeStatusRoutes).toSelf().inSingletonScope();
   container.bind(ScheduledJobRoutes).toSelf().inSingletonScope();
+  container.bind(SandboxRoutes).toSelf().inSingletonScope();
   container.bind(HonoGatewayApp).toSelf().inSingletonScope();
   container.bind(GatewayApp).toService(HonoGatewayApp);
 }

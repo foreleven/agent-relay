@@ -9,8 +9,10 @@ import type {
 import type {
   CreateScheduledJobData,
   UpdateScheduledJobData,
+  CreateSandboxData,
+  UpdateSandboxData,
 } from "@agent-relay/domain";
-import { isValidAgentName } from "@agent-relay/domain";
+import { isValidAgentName, isValidSandboxName } from "@agent-relay/domain";
 import { z } from "../utils/schema.js";
 
 const nonEmptyString = z.string().min(1);
@@ -28,6 +30,9 @@ const sessionIsolationStrategySchema = z.enum([
   "sessionKey",
   "accountId",
 ]);
+const sandboxProviderSchema = z.enum(["aio-sandbox"]);
+const sandboxStatusShellSchema = z.enum(["sh", "bash"]);
+const sandboxRestartPolicySchema = z.enum(["never", "on-failure", "always"]);
 const acpPermissionSchema = z.enum([
   "allow_once",
   "allow_always",
@@ -189,4 +194,54 @@ export const updateScheduledJobBodySchema: z.ZodType<UpdateScheduledJobData> =
     prompt: z.string().optional(),
     cronExpression: z.string().optional(),
     enabled: z.boolean().optional(),
+  });
+
+const sandboxNameSchema = nonEmptyString.refine(isValidSandboxName, {
+  message:
+    "Sandbox name must use only letters, numbers, dots, underscores, and hyphens",
+});
+
+const sandboxEnvVarSchema = z.object({
+  name: nonEmptyString,
+  value: z.string().optional(),
+  secretRef: z.string().optional(),
+}).strict();
+
+const sandboxSpecSchema = z.object({
+  image: z.string().optional(),
+  resources: z.object({
+    cpu: z.number().positive().optional(),
+    memoryMb: z.number().int().positive().optional(),
+    diskMb: z.number().int().positive().optional(),
+  }).strict().optional(),
+  env: z.array(sandboxEnvVarSchema).optional(),
+  workspace: z.object({
+    path: z.string().optional(),
+  }).strict().optional(),
+  initScript: z.object({
+    shell: sandboxStatusShellSchema.optional(),
+    content: z.string(),
+    timeoutMs: z.number().int().positive().optional(),
+  }).strict().optional(),
+  relay: z.object({
+    command: z.string().optional(),
+    args: z.array(z.string()).optional(),
+    restartPolicy: sandboxRestartPolicySchema.optional(),
+  }).strict().optional(),
+  ttlSeconds: z.number().int().min(360).max(86_400).optional(),
+  autoStart: z.boolean().optional(),
+}).strict();
+
+export const createSandboxBodySchema: z.ZodType<CreateSandboxData> =
+  z.object({
+    agentId: nonEmptyString,
+    name: sandboxNameSchema,
+    provider: sandboxProviderSchema.default("aio-sandbox"),
+    spec: sandboxSpecSchema.default({}),
+  });
+
+export const updateSandboxBodySchema: z.ZodType<UpdateSandboxData> =
+  z.object({
+    name: sandboxNameSchema.optional(),
+    spec: sandboxSpecSchema.optional(),
   });

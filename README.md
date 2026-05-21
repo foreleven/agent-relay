@@ -164,6 +164,13 @@ provided Makefile-backed commands.
 | `BUNQUEUE_QUEUE` | `scheduled-jobs` | Queue consumed by scheduled job workers |
 | `BUNQUEUE_WORKER_CONCURRENCY` | `2` | Scheduled job worker concurrency per gateway process |
 | `BUNQUEUE_PREFIX` | - | Optional BunQueue namespace prefix |
+| `SANDBOX_AIO_PSM` | - | aio-sandbox PSM identifier; mutually exclusive with `SANDBOX_AIO_SANDBOX_ID` |
+| `SANDBOX_AIO_SANDBOX_ID` | - | aio-sandbox Sandbox ID; mutually exclusive with `SANDBOX_AIO_PSM` |
+| `SANDBOX_AIO_REGION` | auto | Optional aio-sandbox region |
+| `SANDBOX_AIO_BASE_URL` | - | Optional aio-sandbox control-plane URL |
+| `SANDBOX_AIO_TOKEN` | - | Optional aio-sandbox JWT/ZTI token |
+| `SANDBOX_AIO_USER_JWT` | - | Optional user JWT used by aio-sandbox to generate Git credentials |
+| `SANDBOX_AIO_TIMEOUT_MS` | `300000` | aio-sandbox SDK request timeout |
 | `ECHO_AGENT_PORT` | `3001` | Echo agent HTTP port |
 | `ECHO_AGENT_URL` | `http://localhost:$ECHO_AGENT_PORT` | Echo agent base URL and seed target URL |
 | `FEISHU_APP_ID` | - | Feishu/Lark app ID used by `pnpm seed` |
@@ -228,6 +235,25 @@ gateway binds `a2a`, `acp`, and `ws-tunnel`.
 `ws-tunnel` is exposed in the admin UI as **ACP Remote**. It is for ACP agents
 that cannot accept inbound TCP connections and still connect to the gateway
 through the WebSocket relay. See [docs/ws-tunnel.md](docs/ws-tunnel.md).
+
+### Sandboxes
+
+Sandboxes provision a managed runtime for an ACP Remote agent. The first
+provider adapter targets aio-sandbox and maps AgentRelay start/stop operations
+to aio-sandbox session lifecycle calls. A sandbox can run an initialization
+script with template variables, then start the relay CLI inside the sandbox.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/sandboxes` | List sandbox definitions |
+| `GET` | `/api/sandboxes/:id` | Get one sandbox |
+| `POST` | `/api/sandboxes` | Create a sandbox definition |
+| `PATCH` | `/api/sandboxes/:id` | Update sandbox name or spec |
+| `POST` | `/api/sandboxes/:id/start` | Create/start provider session, run init script, and start relay |
+| `POST` | `/api/sandboxes/:id/stop` | Stop the provider session |
+| `POST` | `/api/sandboxes/:id/refresh` | Refresh provider state into gateway status |
+| `DELETE` | `/api/sandboxes/:id` | Stop if needed and delete the definition |
+| `GET` | `/api/sandboxes/:id/events` | Stream sandbox lifecycle events as SSE |
 
 ### Channels
 
